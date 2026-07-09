@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 38.3809 40.9707" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path id="Soft Star" d="M18.6783 0.485629C18.7503 -0.161876 19.6305 -0.161876 19.7026 0.485629L20.3063 5.91761C21.086 12.9318 26.2665 18.4619 32.8373 19.2942L37.9259 19.9387C38.5325 20.0156 38.5325 20.9552 37.9259 21.0321L32.8373 21.6766C26.2665 22.5088 21.086 28.039 20.3063 35.0531L19.7026 40.485C19.6305 41.1326 18.7503 41.1326 18.6783 40.485L18.0745 35.0531C17.2949 28.039 12.1143 22.5088 5.54355 21.6766L0.454931 21.0321C-0.151644 20.9552 -0.151644 20.0156 0.454931 19.9387L5.54355 19.2942C12.1143 18.4619 17.2949 12.9318 18.0745 5.91761L18.6783 0.485629Z" fill="url(#paint0_linear_0_52)"/>
+<defs>
+<linearGradient id="paint0_linear_0_52" x1="19.1904" y1="0" x2="19.1904" y2="40.9707" gradientUnits="userSpaceOnUse">
+<stop stop-color="#00803E" stop-opacity="0.3"/>
+<stop offset="1" stop-color="#BFD730" stop-opacity="0.3"/>
+</linearGradient>
+</defs>
+</svg>

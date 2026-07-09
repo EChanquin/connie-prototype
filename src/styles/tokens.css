@@ -1,0 +1,88 @@
+/* Connie design tokens — sourced from Figma ★ DS Reference (1052:5971)
+   and ★ Component States (1052:6089). Single source of truth. */
+:root {
+  /* Brand */
+  --color-brand: #00803e;
+  --color-brand-muted: #daede0;
+  --color-brand-light: #d8ecd9;
+
+  /* Foreground */
+  --color-fg-primary: #050500;
+  --color-fg-secondary: #666661;
+  --color-fg-brand: #00803e;
+  --color-fg-attention: #ae0d00;
+  --color-fg-inverse: #ffffff;
+  --color-fg-disabled: #d8d9d4;
+
+  /* Background */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #fafaf7;
+  --color-bg-tertiary: #f2f2ed;
+  --color-bg-brand: #00803e;
+  --color-bg-brand-muted: #daede0;
+  --color-bg-attention: #ae0d00;
+  --color-bg-attention-muted: #fff0f4;
+  --color-bg-disabled: #d8d9d4;
+
+  /* Border */
+  --color-border-subtle: #d8d9d4;
+  --color-border-strong: #989991;
+  --color-border-brand: #00803e;
+  --color-border-black: #050500;
+  --color-border-attention: #ae0d00;
+
+  /* Ratings (CR blob scale) */
+  --color-rating-excellent: #00803e;
+  --color-rating-very-good: #bfd730;
+  --color-rating-good: #ffd500;
+  --color-rating-fair: #ffa500;
+  --color-rating-poor: #ae0d00;
+
+  /* Expressive accents */
+  --color-accent-blue: #003866;
+
+  /* CR launcher (floating "C" button) */
+  --color-cr-launcher: #c4e860;
+
+  /* State layers */
+  --state-hover: #05050029;
+  --state-press: #0505003d;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 32px;
+  --radius-xl: 48px;
+  --radius-pill: 999px;
+
+  /* Spacing core scale */
+  --space-50: 4px;
+  --space-75: 8px;
+  --space-100: 12px;
+  --space-200: 16px;
+  --space-250: 20px;
+  --space-300: 24px;
+  --space-400: 32px;
+  --space-600: 48px;
+  --space-800: 64px;
+
+  /* Typography — CR-Averta (falls back to a neutral grotesk if the licensed face is absent) */
+  --font-sans: 'CR-Averta', 'Averta', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Helvetica, Arial, sans-serif;
+  --text-body: 16px;
+  --leading-body: 24px;
+  --text-title4: 18px;
+  --leading-title4: 22px;
+  --tracking-title4: -0.25px;
+  --text-utility2: 12px;
+  --leading-utility2: 16px;
+
+  /* Elevation */
+  --shadow-subtle: 0 1px 8px 0 #05050014;
+  --shadow-panel: 0px 0px 15px 0px rgba(0, 0, 0, 0.16);
+  --shadow-sunken: inset 0 1px 4px 0 #00000014;
+
+  /* Borders */
+  --border-thin: 1px;
+  --border-thick: 2px;
+}

@@ -1,0 +1,987 @@
+import { useState, type ReactNode, type CSSProperties } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { FigmaFrame } from '@/layouts/FigmaFrame'
+import { routes } from '@/app/routes'
+
+/* ------------------------------------------------------------------ *
+ * Decision Support — faithful reproduction of Figma frames
+ *   1052:4110  Cards View
+ *   1052:3936  Table View
+ *   1052:4218  Cards View · Editable Private List (row selected)
+ *   1052:4398  Cards View · Editable Private List (all selected)
+ *   1052:4512  Cards View · Compare Retailers (price popover)
+ *   1052:4656  Cards View · Detailed (Full Review deep-dive)
+ *   1052:5377  Expanded Cards View (900px panel, metrics grid)
+ *   1052:5762  Expanded Cards View (variant · details collapsed)
+ *   1052:5541  Expanded Table View (900px panel)
+ *
+ * State model (useSearchParams):
+ *   view=cards|table   expanded=1   mode=compare|detailed
+ * Selection is local interactive state (checkboxes).
+ * ------------------------------------------------------------------ */
+
+const A = '/figma/ds-'
+const I = '/figma/insights-'
+const bg = `${A}bg.png`
+
+const asset = {
+  toggleGrid: `${A}toggle-grid.svg`,
+  toggleRows: `${A}toggle-rows.svg`,
+  filter: `${A}filter.svg`,
+  expand: `${A}expand.svg`,
+  close: `${A}close.svg`,
+  share: `${A}share.svg`,
+  trash: `${A}trash.svg`,
+  whyCheck: `${A}whyfits-check.svg`,
+  prodVista: `${A}prod-vista.png`,
+  prodCity: `${A}prod-citymini.png`,
+  avCr: `${A}av-cr.png`,
+  avReddit: `${A}av-reddit.png`,
+  naviChat: `${A}navi-chat.svg`,
+  naviHeart: `${A}navi-heart.svg`,
+  naviLine: `${A}navi-line.svg`,
+  naviGear: `${A}navi-gear.svg`,
+  naviQuestion: `${A}navi-question.svg`,
+}
+
+type View = 'cards' | 'table'
+type Mode = 'compare' | 'detailed' | null
+
+/* -------------------------------------------------------------- Navi bar */
+/** Vertical Navi rail, "Saved" state (heart highlighted) — Figma 1052:5290. */
+function NaviBar({ style }: { style: CSSProperties }) {
+  return (
+    <div
+      className="absolute flex items-center rounded-[8px] border-[0.5px] border-border-subtle bg-white p-[10px] drop-shadow-[0px_0px_7.5px_rgba(5,5,0,0.16)]"
+      style={style}
+    >
+      <div className="flex flex-col items-start gap-[16px]">
+        <div className="flex flex-col items-start gap-[16px]">
+          <img src={asset.naviChat} alt="" className="size-[40px]" />
+          <img src={asset.naviHeart} alt="" className="size-[40px]" />
+        </div>
+        <div className="h-[2px] w-full bg-[#e1e1e1]" />
+        <div className="flex flex-col items-start gap-[16px]">
+          <img src={asset.naviGear} alt="" className="size-[40px]" />
+          <img src={asset.naviQuestion} alt="" className="size-[40px]" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------- Checkbox */
+function CheckBox({ checked, onClick }: { checked: boolean; onClick?: () => void }) {
+  return (
+    <button
+      aria-label="Select"
+      onClick={onClick}
+      className={`flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border ${
+        checked ? 'border-fg-primary bg-fg-primary' : 'border-[#77767b] bg-bg-primary'
+      }`}
+    >
+      {checked && (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 12l5 5L20 6" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
+/* -------------------------------------------------------------- Header */
+function PanelHeader({
+  view,
+  setView,
+  expanded,
+  toggleExpanded,
+  onClose,
+}: {
+  view: View
+  setView: (v: View) => void
+  expanded: boolean
+  toggleExpanded: () => void
+  onClose: () => void
+}) {
+  const tab = (active: boolean) =>
+    `flex size-[32px] items-center justify-center rounded-[4px] ${
+      active ? 'bg-border-subtle drop-shadow-[0px_1px_1px_rgba(0,0,0,0.05)]' : ''
+    }`
+  return (
+    <div className="flex w-full shrink-0 items-center justify-between pb-[12px]">
+      <div className="flex items-center rounded-[8px] bg-bg-tertiary p-[4px]">
+        <button aria-label="Cards view" onClick={() => setView('cards')} className={tab(view === 'cards')}>
+          <img src={asset.toggleGrid} alt="" className="size-[18px]" />
+        </button>
+        <button aria-label="Table view" onClick={() => setView('table')} className={tab(view === 'table')}>
+          <img src={asset.toggleRows} alt="" className="h-[16.667px] w-[15px]" />
+        </button>
+      </div>
+      <div className="flex items-center gap-[8px]">
+        <button aria-label="Filter" className="flex size-[32px] items-center justify-center rounded-full">
+          <img src={asset.filter} alt="" className="h-[12px] w-[18px]" />
+        </button>
+        <button
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+          onClick={toggleExpanded}
+          className="flex size-[32px] items-center justify-center rounded-[8px]"
+        >
+          <img src={asset.expand} alt="" className={`size-[18px] ${expanded ? 'rotate-90' : ''}`} />
+        </button>
+        <button aria-label="Close" onClick={onClose} className="flex size-[32px] items-center justify-center rounded-full">
+          <img src={asset.close} alt="" className="size-[14px]" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------- Selection header */
+function SelectionHeader({
+  expanded,
+  allChecked,
+  toggleAll,
+}: {
+  expanded: boolean
+  allChecked: boolean
+  toggleAll: () => void
+}) {
+  return (
+    <div className="flex w-full shrink-0 items-center gap-[8px] rounded-[8px] bg-bg-tertiary pr-[8px]">
+      <button aria-label="Select all" onClick={toggleAll} className="flex size-[24px] items-center justify-center">
+        <CheckBox checked={allChecked} />
+      </button>
+      <div className="flex flex-1 flex-col">
+        <p className="text-[14px] leading-[20px] text-fg-primary">Select All</p>
+      </div>
+      {expanded ? (
+        <div className="flex items-start gap-[16px]">
+          <button className="flex items-center gap-[6px]">
+            <img src={asset.share} alt="" className="h-[15.75px] w-[12px]" />
+            <span className="text-[14px] leading-[20px] text-fg-secondary">SHARE</span>
+          </button>
+          <button className="flex items-center gap-[6px]">
+            <img src={asset.trash} alt="" className="h-[13.5px] w-[12px]" />
+            <span className="text-[14px] leading-[20px] text-fg-secondary">DELETE</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          <button aria-label="Share" className="size-[18px]">
+            <img src={asset.share} alt="" className="size-full" />
+          </button>
+          <button aria-label="Delete" className="flex h-[26px] w-[25px] items-center justify-center rounded-full">
+            <img src={asset.trash} alt="" className="h-[13.5px] w-[14px]" />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------- Card data */
+type Chip = { img: string; label: string }
+type Card = {
+  id: string
+  img: string
+  rank: string
+  rankBrand: boolean
+  title: string
+  price: string
+  at: string
+  why: string
+  whyLong: string
+  chips: Chip[]
+  primaryBtn: boolean
+}
+
+const cards: Card[] = [
+  {
+    id: 'vista',
+    img: asset.prodVista,
+    rank: '#1 BEST MATCH',
+    rankBrand: true,
+    title: 'UppaBaby Vista V2',
+    price: '$999.00',
+    at: 'AT AMAZON',
+    why: 'Matches your high-priority for all-terrain stability. The dual-action suspension system is rated top-tier for gravel and uneven paths.',
+    whyLong:
+      'Matches your high-priority for all-terrain stability. The dual-action suspension system is rated top-tier for gravel and uneven paths. High durability ensures long-term value.',
+    chips: [
+      { img: asset.avCr, label: 'CR 2024 Lab Results' },
+      { img: asset.avReddit, label: 'Reddit Community' },
+    ],
+    primaryBtn: true,
+  },
+  {
+    id: 'city',
+    img: asset.prodCity,
+    rank: '#2 RUNNER UP',
+    rankBrand: false,
+    title: 'Baby Jogger City Mini GT2',
+    price: '$399.99',
+    at: 'AT WALMART',
+    why: 'Excellent for your secondary need for compact storage. One-hand quick fold outperforms competitors in tight trunks.',
+    whyLong:
+      'Excellent for your secondary need for compact storage. One-hand quick fold outperforms competitors in tight trunks.',
+    chips: [{ img: asset.avCr, label: 'Safety Certification' }],
+    primaryBtn: false,
+  },
+]
+
+/* ----------------------------------------------------------- Why-this-fits */
+function WhyThisFits({ text, pad = 9 }: { text: string; pad?: number }) {
+  return (
+    <div
+      className="w-full rounded-[12px] border border-[#daede0] bg-[rgba(240,253,244,0.2)]"
+      style={{ padding: pad }}
+    >
+      <div className="flex flex-col gap-[8px]">
+        <div className="flex items-center gap-[8px]">
+          <img src={asset.whyCheck} alt="" className="h-[14px] w-[14.667px]" />
+          <span className="whitespace-nowrap text-[14px] leading-[20px] text-[#15803d]">WHY THIS FITS YOU</span>
+        </div>
+        <p className="text-[14px] leading-[20px] text-[#47464b]">{text}</p>
+      </div>
+    </div>
+  )
+}
+
+function SourceChip({ chip }: { chip: Chip }) {
+  return (
+    <div className="flex items-center gap-[6px] self-stretch rounded-full bg-bg-tertiary px-[10px] py-[4px]">
+      <img src={chip.img} alt="" className="size-[20px] rounded-full border-[0.5px] border-white object-cover" />
+      <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">{chip.label}</span>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------- Compact card */
+function CompactCard({
+  card,
+  checked,
+  onCheck,
+  onReview,
+  children,
+}: {
+  card: Card
+  checked: boolean
+  onCheck: () => void
+  onReview?: () => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="relative flex w-full items-start gap-[8px]">
+      <div className="flex w-[24px] shrink-0 flex-col items-center pt-[47px]">
+        <CheckBox checked={checked} onClick={onCheck} />
+      </div>
+      <div className="flex min-w-px flex-1 flex-col gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.04)]">
+        <div className="flex items-start gap-[16px]">
+          <div className="flex size-[80px] shrink-0 items-center justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
+            <img src={card.img} alt="" className="size-full rounded-[8px] object-cover" />
+          </div>
+          <div className="flex flex-1 flex-col gap-[4px]">
+            <div className="flex">
+              <div
+                className={`flex items-start rounded-[4px] px-[8px] py-[4px] ${
+                  card.rankBrand ? 'bg-bg-brand-muted' : 'bg-bg-tertiary'
+                }`}
+              >
+                <span
+                  className={`whitespace-nowrap text-[14px] leading-[20px] ${
+                    card.rankBrand ? 'text-fg-brand' : 'text-fg-secondary'
+                  }`}
+                >
+                  {card.rank}
+                </span>
+              </div>
+            </div>
+            <p className="text-[14px] font-semibold leading-[20px] text-fg-primary">{card.title}</p>
+            <div className="flex items-center gap-[9px]">
+              <span className="text-[14px] leading-[20px] text-fg-primary">{card.price}</span>
+              <div className="flex rounded-[4px] bg-border-subtle px-[8px] py-[4px]">
+                <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">{card.at}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <WhyThisFits text={card.why} />
+
+        <div className="flex flex-wrap gap-[8px]">
+          {card.chips.map((c) => (
+            <SourceChip key={c.label} chip={c} />
+          ))}
+        </div>
+
+        <button
+          onClick={onReview}
+          className={`w-full rounded-[8px] py-[10px] text-center text-[14px] leading-[20px] ${
+            card.primaryBtn
+              ? 'bg-brand text-fg-inverse'
+              : 'border border-border-subtle bg-border-subtle text-fg-brand'
+          }`}
+        >
+          View Full Review
+        </button>
+
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------ Compare popover */
+type Retailer = { name: string; price: string; deal: string; dealColor: string; primary: boolean }
+const retailers: Retailer[] = [
+  { name: 'Amazon', price: '$899.99', deal: 'PRIME DEAL: 10% OFF', dealColor: 'text-fg-brand', primary: true },
+  { name: 'Target', price: '$949.99', deal: 'REDCARD: 5% OFF', dealColor: 'text-fg-brand', primary: false },
+  { name: 'BuyBuy Baby', price: '$999.00', deal: 'FREE SHIPPING', dealColor: 'text-fg-secondary', primary: false },
+]
+
+function ComparePopover({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="absolute z-20 flex flex-col gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
+      style={{ right: 70, top: 276, width: 288 }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] leading-[20px] text-fg-primary">Compare Prices</span>
+        <button aria-label="Close" onClick={onClose} className="size-[10.5px] pb-[6px]">
+          <img src={asset.close} alt="" className="size-[10.5px]" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-[12px]">
+        {retailers.map((r) => (
+          <div key={r.name} className="flex flex-col gap-[4px] border-b border-border-subtle pb-[9px]">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[16px] leading-[24px] text-fg-primary">{r.name}</span>
+              <span className="text-[14px] leading-[20px] text-fg-primary">{r.price}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-[12px] font-semibold leading-[16px] ${r.dealColor}`}>{r.deal}</span>
+              <button
+                className={`flex items-center justify-center rounded-[12px] px-[12px] py-[4px] text-[12px] font-semibold leading-[16px] ${
+                  r.primary ? 'bg-brand text-fg-inverse' : 'border border-border-subtle bg-bg-tertiary text-fg-secondary'
+                }`}
+              >
+                View Deal
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------- Table (shared) */
+type TableRow = {
+  name: string
+  badge?: string
+  badgeType?: 'best' | 'runner' | 'notrec'
+  fold: string
+  weight: string
+  terrain: boolean
+  price: string
+}
+const tableRows: TableRow[] = [
+  { name: 'Vista V2', badge: 'BEST', badgeType: 'best', fold: '2-Step', weight: '27lb', terrain: true, price: '$999' },
+  { name: 'GT2', badge: 'RUNNER', badgeType: 'runner', fold: '1-Hand', weight: '21lb', terrain: true, price: '$449' },
+  { name: 'Lite 3', badge: 'NOT REC', badgeType: 'notrec', fold: '3-Step', weight: '15lb', terrain: false, price: '$199' },
+  { name: 'Mockingbird', fold: '2-Step', weight: '26lb', terrain: true, price: '$650' },
+  { name: 'Cruz V2', fold: '2-Step', weight: '25lb', terrain: true, price: '$699' },
+  { name: 'Urban Glide 2', fold: '1-Hand', weight: '25lb', terrain: true, price: '$649' },
+  { name: 'Minu V2', fold: '1-Hand', weight: '17lb', terrain: false, price: '$449' },
+  { name: 'G-Luxe', fold: '3-Step', weight: '16lb', terrain: false, price: '$199' },
+  { name: 'Mixx Next', fold: '2-Step', weight: '28lb', terrain: true, price: '$800' },
+]
+
+function TerrainMark({ ok }: { ok: boolean }) {
+  return ok ? (
+    <span className="flex size-[20px] items-center justify-center rounded-full bg-rating-excellent">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12l5 5L20 6" />
+      </svg>
+    </span>
+  ) : (
+    <span className="flex size-[20px] items-center justify-center rounded-full bg-bg-attention">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </span>
+  )
+}
+
+function TableBadge({ row }: { row: TableRow }) {
+  if (!row.badge) return null
+  const cls =
+    row.badgeType === 'best'
+      ? 'bg-bg-brand-muted text-fg-brand'
+      : row.badgeType === 'runner'
+        ? 'bg-border-subtle text-fg-brand'
+        : 'bg-[#fef2f2] text-fg-attention'
+  return (
+    <div className={`flex w-fit items-center rounded-full px-[6px] py-[2px] ${cls}`}>
+      <span className="whitespace-nowrap text-[12px] font-semibold leading-[16px]">{row.badge}</span>
+    </div>
+  )
+}
+
+/** Insight callout — gradient "CR Verdict" banner (Figma 1052:3959). */
+function InsightCallout() {
+  return (
+    <div className="flex w-full shrink-0 items-start gap-[12px] rounded-[16px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] p-[16px]">
+      <img src={`${I}info.svg`} alt="" className="size-[20px] shrink-0" />
+      <p className="flex-1 text-[16px] leading-[24px] text-fg-primary">
+        CR Verdict: The Vista V2 is heavier but offers superior durability and all-terrain performance which matches
+        your "Rural/Active" preference profile.
+      </p>
+    </div>
+  )
+}
+
+/** Standard (transposed) comparison table — Figma 1052:3974. */
+function StandardTable() {
+  const th = 'flex flex-col justify-center border-b border-border-subtle px-[8px] pb-[9px] pt-[8px] text-[12px] font-semibold leading-[16px] text-fg-primary'
+  const td = 'flex flex-col justify-center border-b border-border-subtle px-[8px] pb-[13.5px] pt-[11.5px] text-[12px] font-semibold leading-[16px] text-fg-primary'
+  return (
+    <div className="w-full shrink-0 overflow-clip">
+      {/* header */}
+      <div className="flex w-full items-start justify-center rounded-t-[12px] bg-bg-tertiary">
+        <div className={`${th} w-[119.31px] items-start rounded-tl-[12px]`}>Product</div>
+        <div className={`${th} w-[64.52px] items-center text-center`}>Fold</div>
+        <div className={`${th} w-[64.11px] items-center text-center`}>Weight</div>
+        <div className={`${th} w-[64.41px] items-center text-center`}>Terrain</div>
+        <div className={`${th} w-[53.66px] items-end rounded-tr-[12px] text-right`}>Price</div>
+      </div>
+      {/* body */}
+      <div className="flex w-full flex-col bg-bg-primary">
+        {tableRows.map((r) => (
+          <div key={r.name} className="flex w-full items-stretch justify-center">
+            <div className="flex w-[119.31px] flex-col items-start justify-center gap-[2px] border-b border-border-subtle px-[8px] py-[10px]">
+              <span className="text-[14px] leading-[20px] text-fg-primary">{r.name}</span>
+              <TableBadge row={r} />
+            </div>
+            <div className={`${td} w-[64.52px] items-center text-center`}>{r.fold}</div>
+            <div className={`${td} w-[64.11px] items-center text-center`}>{r.weight}</div>
+            <div className="flex w-[64.41px] flex-col items-center justify-center border-b border-border-subtle px-[8px]">
+              <TerrainMark ok={r.terrain} />
+            </div>
+            <div className={`${td} w-[53.66px] items-end text-right`}>{r.price}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Wide table w/ thumbnail column — Expanded Table View (Figma 1052:5541). */
+function ExpandedTable() {
+  const th = 'border-b border-border-subtle px-[12px] pb-[10px] pt-[10px] text-[12px] font-semibold leading-[16px] text-fg-secondary'
+  const cellPad = 'border-b border-border-subtle px-[12px] py-[16px]'
+  return (
+    <div className="w-full shrink-0 overflow-clip">
+      <div className="flex w-full items-center">
+        <div className={`${th} w-[90px]`} />
+        <div className={`${th} flex-1`}>Product</div>
+        <div className={`${th} w-[120px] text-left`}>Fold</div>
+        <div className={`${th} w-[120px] text-left`}>Weight</div>
+        <div className={`${th} w-[120px] text-left`}>Terrain</div>
+        <div className={`${th} w-[120px] text-left`}>Price</div>
+      </div>
+      <div className="flex w-full flex-col">
+        {tableRows.map((r) => (
+          <div key={r.name} className="flex w-full items-center">
+            <div className={`${cellPad} w-[90px]`}>
+              <div
+                className="size-[56px] rounded-[8px]"
+                style={{
+                  background:
+                    'repeating-conic-gradient(#ecece7 0% 25%, #f7f7f4 0% 50%) 50% / 16px 16px',
+                }}
+              />
+            </div>
+            <div className={`${cellPad} flex flex-1 flex-col gap-[4px]`}>
+              <span className="text-[14px] leading-[20px] text-fg-primary">{r.name}</span>
+              <TableBadge row={r} />
+            </div>
+            <div className={`${cellPad} w-[120px] text-[14px] leading-[20px] text-fg-primary`}>{r.fold}</div>
+            <div className={`${cellPad} w-[120px] text-[14px] leading-[20px] text-fg-primary`}>{r.weight}</div>
+            <div className={`${cellPad} flex w-[120px]`}>
+              <TerrainMark ok={r.terrain} />
+            </div>
+            <div className={`${cellPad} w-[120px] text-[14px] leading-[20px] text-fg-primary`}>{r.price}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Featured verdict banner atop the Expanded Table View. */
+function ExpandedVerdictBanner() {
+  return (
+    <div className="flex w-full shrink-0 items-center gap-[16px] rounded-[16px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] p-[16px]">
+      <div className="flex size-[64px] shrink-0 items-center justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
+        <img src={asset.prodVista} alt="" className="size-full object-cover" />
+      </div>
+      <div className="flex w-[200px] shrink-0 flex-col gap-[4px]">
+        <div className="flex w-fit rounded-[4px] bg-bg-brand-muted px-[8px] py-[2px]">
+          <span className="text-[12px] font-semibold leading-[16px] text-fg-brand">CR Verdict</span>
+        </div>
+        <p className="text-[18px] font-semibold leading-[22px] text-fg-primary">UppaBaby Vista V2</p>
+        <p className="text-[14px] leading-[20px] text-fg-primary">$999.00</p>
+      </div>
+      <p className="flex-1 text-[16px] leading-[24px] text-fg-secondary">
+        The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your
+        "Rural/Active" preference profile.
+      </p>
+    </div>
+  )
+}
+
+/* --------------------------------------------------- Expanded card + metrics */
+type Metric = { title: string; text: string; icon: string; dim?: boolean }
+const metrics: Metric[] = [
+  {
+    title: 'Top Rated',
+    text: 'No bumps in the road here. CR and parents agree: this one earns its reputation.',
+    icon: `${I}toprated.svg`,
+  },
+  {
+    title: 'City Certified',
+    text: 'Built for the urban jungle. Handles sidewalks and curbs effortlessly and folds compactly.',
+    icon: `${I}city.svg`,
+  },
+  {
+    title: 'Built to Last',
+    text: 'High-quality fabrics and wheels that make resale easy and hand-me-downs an option.',
+    icon: `${I}sketch.svg`,
+    dim: true,
+  },
+]
+
+function MetricSources() {
+  return (
+    <div className="flex items-center gap-[10px]">
+      <div className="relative flex size-[28px] items-center opacity-60">
+        <img
+          src={`${I}av5.png`}
+          alt=""
+          className="absolute left-[14px] top-[4px] size-[20px] rounded-full border-[0.5px] border-white object-cover"
+        />
+        <img
+          src={`${I}av7.png`}
+          alt=""
+          className="size-[20px] rounded-full border-[0.5px] border-white object-cover"
+        />
+      </div>
+      <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">+1</span>
+    </div>
+  )
+}
+
+function MetricCard({ m }: { m: Metric }) {
+  return (
+    <div className="flex items-center gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px]">
+      <div
+        className={`flex size-[45px] shrink-0 items-center justify-center rounded-[22.5px] ${m.dim ? 'opacity-80' : ''}`}
+        style={{ background: 'linear-gradient(180deg, #77798d 0%, #b1b3b9 100%)' }}
+      >
+        <img src={m.icon} alt="" className="size-[24px]" style={{ filter: 'brightness(0) invert(1)' }} />
+      </div>
+      <div className="flex flex-1 flex-col gap-[4px]">
+        <div className="flex items-center gap-[8px]">
+          <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-primary">{m.title}</span>
+          <MetricSources />
+        </div>
+        <p className="text-[14px] leading-[20px] text-fg-secondary">{m.text}</p>
+      </div>
+      <img src={`${I}caret.svg`} alt="" className="h-[7.4px] w-[12px] -rotate-90 shrink-0" />
+    </div>
+  )
+}
+
+function ExpandedCard({
+  card,
+  checked,
+  onCheck,
+  showDetails,
+  onToggleDetails,
+}: {
+  card: Card
+  checked: boolean
+  onCheck: () => void
+  showDetails: boolean
+  onToggleDetails: () => void
+}) {
+  return (
+    <div className="flex w-full items-start gap-[8px]">
+      <div className="flex w-[24px] shrink-0 flex-col items-center pt-[47px]">
+        <CheckBox checked={checked} onClick={onCheck} />
+      </div>
+      <div className="flex min-w-px flex-1 flex-col gap-[16px] rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] drop-shadow-[0px_2px_4px_rgba(0,0,0,0.04)]">
+        <div className="relative flex items-start gap-[20px]">
+          {/* image + carousel */}
+          <div className="relative flex size-[311px] shrink-0 items-center justify-center overflow-clip rounded-[24px] bg-bg-tertiary">
+            <img src={card.img} alt="" className="size-full object-cover" />
+            <div className="absolute left-0 top-[144px] flex w-[311px] items-center justify-between px-[8px]">
+              <button aria-label="Previous" className="flex size-[24px] items-center justify-center rounded-full bg-white/80 text-fg-primary shadow-subtle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+              <button aria-label="Next" className="flex size-[24px] items-center justify-center rounded-full bg-white/80 text-fg-primary shadow-subtle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+            </div>
+          </div>
+          {/* right column */}
+          <div className="flex h-[311px] w-[429px] shrink-0 flex-col gap-[19px]">
+            <div className="flex flex-col gap-[5px] pt-[4px]">
+              <div className="flex w-fit rounded-[8px] bg-bg-brand-muted px-[10px] py-[5px]">
+                <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-brand">{card.rank}</span>
+              </div>
+              <p className="text-[14px] leading-[20px] text-fg-primary">{card.title}</p>
+              <span className="text-[14px] leading-[20px] text-fg-primary">{card.price}</span>
+              <div className="flex w-fit rounded-[8px] bg-border-subtle px-[10px] py-[5px]">
+                <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">{card.at}</span>
+              </div>
+            </div>
+            <WhyThisFits text={card.whyLong} pad={17} />
+            <div className="flex flex-wrap gap-[8px]">
+              {card.chips.map((c) => (
+                <SourceChip key={c.label} chip={c} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* metrics toggle row */}
+        <div className="flex items-center justify-between">
+          <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">LAB &amp; USER METRICS</span>
+          <button onClick={onToggleDetails} className="flex items-center gap-[6px]">
+            <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">
+              {showDetails ? 'Hide Details' : 'Show Details'}
+            </span>
+            <img src={`${I}caret.svg`} alt="" className={`h-[5.55px] w-[9px] ${showDetails ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {showDetails && (
+          <div className="grid grid-cols-2 gap-[12px]">
+            {metrics.map((m) => (
+              <MetricCard key={m.title} m={m} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------- Detailed deep-dive */
+type DetailRow = { icon: string; iconSize: number; title: string; subtitle: string }
+const detailRows: DetailRow[] = [
+  { icon: `${I}toprated.svg`, iconSize: 20, title: 'Top Rated', subtitle: 'No bumps in the road here. CR and parents agree: this one earns its reputation.' },
+  { icon: `${I}city.svg`, iconSize: 18, title: 'City Certified', subtitle: 'Built for the urban jungle. Handles sidewalks and curbs effortlessly and folds compactly.' },
+  { icon: `${I}sketch.svg`, iconSize: 20, title: 'Built to Last', subtitle: 'High-quality fabrics and wheels that make resale easy and hand-me-downs an option.' },
+  { icon: `${I}cloud.svg`, iconSize: 20, title: 'Ride in Comfort', subtitle: 'Plush seat, smooth suspension, happy kid. Fewer complaints from the passenger seat.' },
+  { icon: `${I}fold.svg`, iconSize: 28, title: 'No-Fuss Fold', subtitle: 'Snaps open and folds shut in seconds — one hand, no wrestling.' },
+]
+
+function DeepDiveRow({ row, first, last }: { row: DetailRow; first: boolean; last: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div
+      className={`flex w-full flex-col border-[0.5px] border-[#dfdfd9] bg-white ${first ? 'rounded-t-[16px]' : '-mt-[0.5px]'} ${
+        last && !open ? 'rounded-b-[16px]' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between gap-[8px] overflow-hidden pb-[16px] pl-[16px] pr-[16px] pt-[16px]">
+        <div className="flex flex-1 items-start gap-[12px]">
+          <div className="flex size-[32px] shrink-0 items-center justify-center rounded-[8px] bg-bg-secondary">
+            <img src={row.icon} alt="" style={{ width: row.iconSize, height: row.iconSize }} />
+          </div>
+          <div className="flex flex-1 flex-col gap-[4px]">
+            <p className="text-[14px] font-semibold leading-[20px] text-fg-primary">{row.title}</p>
+            <p className="text-[14px] leading-[20px] text-[#282923]">{row.subtitle}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Toggle"
+          className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-bg-tertiary"
+        >
+          <img src={`${I}caret.svg`} alt="" className={`h-[9px] w-[12px] ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-[12px] border-t-[0.5px] border-[#dadada] px-[20px] pb-[16px] pt-[14px]">
+          <p className="text-[14px] leading-[20px] text-[#242424]">
+            CR's lab testers and community threads consistently rank this near the top for {row.title.toLowerCase()}.
+          </p>
+          <div className="flex w-fit items-center gap-[4px] rounded-full border border-border-subtle bg-white py-[4px] pl-[8px] pr-[12px]">
+            <img src={`${I}av7.png`} alt="" className="size-[16px] rounded-full border-[0.5px] border-white object-cover" />
+            <span className="whitespace-nowrap text-[11px] leading-[16px] text-[#222]">Consumer Reports</span>
+            <img src={`${I}arrowupright.svg`} alt="" className="size-[12px]" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailedDeepDive({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex w-full flex-1 flex-col gap-[20px] overflow-auto pt-[8px]">
+      {/* RECOMMENDED + Save */}
+      <div className="flex w-full items-center justify-between">
+        <div className="flex items-center gap-[10px]">
+          <img src={`${I}star.svg`} alt="" className="size-[20px]" />
+          <span className="text-[18px] font-semibold leading-[22px] tracking-[-0.25px] text-fg-primary">RECOMMENDED</span>
+          <img src={`${I}info.svg`} alt="" className="size-[20px]" />
+        </div>
+        <button className="flex h-[36px] items-center justify-center gap-[6px] rounded-[24px] border border-border-subtle bg-white px-[16px]">
+          <span className="text-[14px] font-semibold leading-[20px] text-fg-secondary">Save</span>
+          <img src={`${I}save.svg`} alt="" className="h-[11px] w-[13px]" />
+        </button>
+      </div>
+
+      {/* DID YOU KNOW */}
+      <div className="relative flex w-full flex-col gap-[4px] overflow-hidden rounded-[8px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] px-[16px] py-[14px]">
+        <div className="flex items-center gap-[8px]">
+          <img src={`${I}shootingstar.svg`} alt="" className="size-[18px]" />
+          <span className="text-[14px] font-semibold leading-[20px] text-[#282923]">DID YOU KNOW?</span>
+        </div>
+        <p className="w-[300px] text-[14px] leading-[20px] text-[#282923]">
+          Oscar-winning actress Anne Hathaway has been spotted pushing this stroller through Central Park.
+        </p>
+        <img
+          src={`${I}didyouknow.png`}
+          alt=""
+          className="absolute right-[16px] top-[14px] size-[80px] rounded-[8px] object-cover opacity-15"
+        />
+      </div>
+
+      {/* rows */}
+      <div className="flex w-full flex-col">
+        {detailRows.map((r, i) => (
+          <DeepDiveRow key={r.title} row={r} first={i === 0} last={i === detailRows.length - 1} />
+        ))}
+      </div>
+
+      <button onClick={onBack} className="text-left text-[14px] font-semibold leading-[20px] text-fg-brand">
+        ← Back to list
+      </button>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------- State switcher */
+type StateKey = 'cards' | 'table' | 'editable' | 'compare' | 'detailed' | 'xcards' | 'xtable'
+function StateSwitcher({ current, onSelect }: { current: StateKey; onSelect: (k: StateKey) => void }) {
+  const items: { k: StateKey; label: string }[] = [
+    { k: 'cards', label: 'Cards' },
+    { k: 'table', label: 'Table' },
+    { k: 'editable', label: 'Editable' },
+    { k: 'compare', label: 'Compare' },
+    { k: 'detailed', label: 'Detailed' },
+    { k: 'xcards', label: 'Exp. Cards' },
+    { k: 'xtable', label: 'Exp. Table' },
+  ]
+  return (
+    <div className="absolute left-[12px] top-[12px] z-30 flex flex-wrap items-center gap-[4px] rounded-[10px] border border-border-subtle bg-white/95 p-[6px] shadow-subtle">
+      {items.map((it) => (
+        <button
+          key={it.k}
+          onClick={() => onSelect(it.k)}
+          className={`rounded-[6px] px-[8px] py-[4px] text-[12px] font-medium ${
+            current === it.k ? 'bg-brand text-fg-inverse' : 'text-fg-secondary hover:bg-bg-tertiary'
+          }`}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/* ============================================================ Screen */
+export function DecisionSupportScreen() {
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+
+  const view = (params.get('view') as View) || 'cards'
+  const expanded = params.get('expanded') === '1'
+  const mode = (params.get('mode') as Mode) || null
+
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [showDetails, setShowDetails] = useState(true)
+
+  const setView = (v: View) => {
+    params.set('view', v)
+    params.delete('mode')
+    setParams(params, { replace: true })
+  }
+  const toggleExpanded = () => {
+    if (expanded) params.delete('expanded')
+    else params.set('expanded', '1')
+    params.delete('mode')
+    setParams(params, { replace: true })
+  }
+  const setMode = (m: Mode) => {
+    if (m) params.set('mode', m)
+    else params.delete('mode')
+    setParams(params, { replace: true })
+  }
+
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  const allChecked = cards.every((c) => selected.has(c.id))
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(cards.map((c) => c.id)))
+
+  const panelWidth = expanded ? 900 : 520
+  const panelLeft = 1440 - 16 - panelWidth // right-aligned inside p-16 body
+
+  /* which state switcher key is active */
+  const stateKey: StateKey =
+    mode === 'detailed'
+      ? 'detailed'
+      : mode === 'compare'
+        ? 'compare'
+        : expanded
+          ? view === 'table'
+            ? 'xtable'
+            : 'xcards'
+          : view === 'table'
+            ? 'table'
+            : allChecked || selected.size > 0
+              ? 'editable'
+              : 'cards'
+
+  const onState = (k: StateKey) => {
+    const p = new URLSearchParams()
+    switch (k) {
+      case 'cards':
+        p.set('view', 'cards')
+        setSelected(new Set())
+        break
+      case 'editable':
+        p.set('view', 'cards')
+        setSelected(new Set(cards.map((c) => c.id)))
+        break
+      case 'compare':
+        p.set('view', 'cards')
+        p.set('mode', 'compare')
+        break
+      case 'detailed':
+        p.set('view', 'cards')
+        p.set('mode', 'detailed')
+        break
+      case 'table':
+        p.set('view', 'table')
+        break
+      case 'xcards':
+        p.set('view', 'cards')
+        p.set('expanded', '1')
+        setSelected(new Set(cards.map((c) => c.id)))
+        break
+      case 'xtable':
+        p.set('view', 'table')
+        p.set('expanded', '1')
+        setSelected(new Set(cards.map((c) => c.id)))
+        break
+    }
+    setParams(p, { replace: true })
+  }
+
+  const detailed = mode === 'detailed'
+
+  return (
+    <FigmaFrame backdrop={bg} backdropOpacity={0.4}>
+      {/* Connie floating panel */}
+      <div
+        className="absolute flex flex-col overflow-clip rounded-[16px] border border-border-subtle bg-bg-secondary p-[37px] shadow-[0px_0px_15px_0px_rgba(0,0,0,0.16)]"
+        style={{ left: panelLeft, top: 16, width: panelWidth, height: 868 }}
+      >
+        {detailed ? (
+          <>
+            {/* deep-dive header */}
+            <div className="flex w-full shrink-0 items-start justify-between pb-[12px]">
+              <div className="flex items-start gap-[10px]">
+                <button aria-label="Back" onClick={() => setMode(null)} className="pt-[2px] text-fg-primary">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+                </button>
+                <div className="flex flex-col">
+                  <span className="text-[16px] font-semibold leading-[22px] text-fg-primary">UppaBaby Vista V2</span>
+                  <span className="text-[14px] leading-[20px] text-fg-secondary">Full Review Deep-dive</span>
+                </div>
+              </div>
+              <button aria-label="Close" onClick={() => navigate(routes.insights)} className="text-fg-primary">
+                <img src={asset.close} alt="" className="size-[16px]" />
+              </button>
+            </div>
+            <DetailedDeepDive onBack={() => setMode(null)} />
+          </>
+        ) : (
+          <>
+            <PanelHeader
+              view={view}
+              setView={setView}
+              expanded={expanded}
+              toggleExpanded={toggleExpanded}
+              onClose={() => navigate(routes.insights)}
+            />
+
+            <div className="flex w-full flex-1 flex-col gap-[20px] overflow-auto pb-[24px] pt-[8px]">
+              {view === 'table' ? (
+                <>
+                  {expanded ? <ExpandedVerdictBanner /> : <InsightCallout />}
+                  <SelectionHeader expanded={expanded} allChecked={allChecked} toggleAll={toggleAll} />
+                  {expanded ? <ExpandedTable /> : <StandardTable />}
+                </>
+              ) : (
+                <>
+                  <SelectionHeader expanded={expanded} allChecked={allChecked} toggleAll={toggleAll} />
+                  {expanded
+                    ? cards.map((c) => (
+                        <ExpandedCard
+                          key={c.id}
+                          card={c}
+                          checked={selected.has(c.id)}
+                          onCheck={() => toggle(c.id)}
+                          showDetails={c.id === 'vista' ? showDetails : false}
+                          onToggleDetails={() => setShowDetails((s) => !s)}
+                        />
+                      ))
+                    : cards.map((c) => (
+                        <CompactCard
+                          key={c.id}
+                          card={c}
+                          checked={selected.has(c.id)}
+                          onCheck={() => toggle(c.id)}
+                          onReview={() => setMode('detailed')}
+                        />
+                      ))}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Compare Prices popover — frame-level overlay (Figma 1052:4619) */}
+      {mode === 'compare' && view === 'cards' && !expanded && (
+        <ComparePopover onClose={() => setMode(null)} />
+      )}
+
+      <NaviBar style={{ left: 62, top: 300 }} />
+
+      <StateSwitcher current={stateKey} onSelect={onState} />
+    </FigmaFrame>
+  )
+}

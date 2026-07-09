@@ -1,0 +1,225 @@
+import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { FigmaFrame } from '@/layouts/FigmaFrame'
+import { routes } from '@/app/routes'
+
+/* Chat 4 — Post-purchase in chat (1052:5908).
+   The Figma frame is an empty placeholder, so this reproduces the "post-purchase
+   in chat" view using the same Connie chat-panel design established by the
+   Post-Purchase frames (1052:4834 …), showing the completed thread. */
+
+const asset = {
+  backdrop: '/figma/pp-backdrop.png',
+  naviChat: '/figma/pp-navi-chat.svg',
+  naviHeart: '/figma/pp-navi-heart.svg',
+  naviLine: '/figma/pp-navi-line.svg',
+  naviGear: '/figma/pp-navi-gear.svg',
+  naviQuestion: '/figma/pp-navi-question.svg',
+  vista: '/figma/pp-vista.png',
+  close: '/figma/pp-header-caret.svg',
+  send: '/figma/pp-send.svg',
+  bannerStar: '/figma/pp-banner-star.svg',
+}
+
+function Backdrop() {
+  return (
+    <div className="absolute overflow-hidden" style={{ left: -141, top: -6, width: 1656, height: 1035 }}>
+      <div className="absolute inset-0 overflow-hidden opacity-30">
+        <img
+          alt=""
+          src={asset.backdrop}
+          className="absolute max-w-none"
+          style={{ left: '-14.65%', top: '-17.12%', width: '117.12%', height: '117.12%' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function NaviRail() {
+  return (
+    <div
+      className="absolute flex items-center rounded-[8px] border-[0.5px] border-border-subtle bg-white p-[10px] shadow-[0px_0px_7.5px_0px_rgba(5,5,0,0.16)]"
+      style={{ left: 62, top: 300 }}
+    >
+      <div className="flex flex-col items-start gap-[16px]">
+        <div className="flex flex-col items-start gap-[16px]">
+          <div className="relative size-[40px]">
+            <img alt="" src={asset.naviChat} className="absolute inset-0 block size-full" />
+          </div>
+          <div className="relative size-[40px]">
+            <img alt="" src={asset.naviHeart} className="absolute inset-0 block size-full" />
+          </div>
+        </div>
+        <div className="relative h-0 w-full">
+          <img alt="" src={asset.naviLine} className="block h-[2px] w-full" />
+        </div>
+        <div className="flex flex-col items-start gap-[16px]">
+          <div className="relative size-[40px]">
+            <img alt="" src={asset.naviGear} className="absolute inset-0 block size-full" />
+          </div>
+          <div className="relative size-[40px]">
+            <img alt="" src={asset.naviQuestion} className="absolute inset-0 block size-full" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BotBubble({ children }: { children: ReactNode }) {
+  return (
+    <div className="w-[340px] shrink-0 overflow-clip rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-bg-tertiary px-[16px] py-[13px]">
+      <p className="w-full text-[16px] leading-[24px] text-fg-primary">{children}</p>
+    </div>
+  )
+}
+
+function UserBubble({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex w-full shrink-0 items-start justify-end overflow-clip">
+      <div className="w-[260px] overflow-clip rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-fg-primary px-[16px] py-[13px]">
+        <p className="w-full text-[16px] font-semibold leading-[24px] text-white">{children}</p>
+      </div>
+    </div>
+  )
+}
+
+type ChipState = 'default' | 'selected'
+function Chip({ label, state = 'default' }: { label: string; state?: ChipState }) {
+  const border = state === 'selected' ? 'border-2 border-border-brand' : 'border-[1.5px] border-[#d9d9db]'
+  return (
+    <div
+      className={`flex shrink-0 items-center overflow-clip rounded-pill bg-bg-primary px-[15px] py-[9px] ${border}`}
+    >
+      <p className="whitespace-nowrap text-[14px] leading-[20px] text-fg-primary">{label}</p>
+    </div>
+  )
+}
+
+function ChipRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex w-full shrink-0 flex-wrap content-start items-start gap-[8px] overflow-clip">
+      {children}
+    </div>
+  )
+}
+
+function ProductCard() {
+  return (
+    <div className="flex shrink-0 items-start gap-[16px]">
+      <div className="flex size-[80px] shrink-0 flex-col items-start justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
+        <img alt="" src={asset.vista} className="size-full rounded-[8px] object-cover" />
+      </div>
+      <div className="flex w-[236px] shrink-0 flex-col items-start gap-[4px]">
+        <div className="h-[28px] w-full">
+          <div className="flex items-start rounded-[4px] bg-bg-brand-muted px-[8px] py-[4px]">
+            <p className="whitespace-nowrap text-[14px] leading-[20px] text-fg-brand">#1 BEST MATCH</p>
+          </div>
+        </div>
+        <div className="w-full overflow-clip">
+          <p className="w-full text-[14px] font-semibold leading-[20px] text-fg-primary">UppaBaby Vista V2</p>
+        </div>
+        <div className="flex h-[30px] w-full items-center gap-[9px]">
+          <p className="w-[60px] text-[14px] leading-[20px] text-fg-primary">$999.00</p>
+          <div className="flex items-start rounded-[4px] bg-[#fff3b3] px-[8px] py-[4px]">
+            <p className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">AT AMAZON</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ThanksBanner() {
+  return (
+    <div className="flex w-full shrink-0 items-center gap-[10px] overflow-clip rounded-md bg-[#f2eddb] py-[13px] pl-[15px] pr-[16px]">
+      <img alt="" src={asset.bannerStar} className="size-[20px] shrink-0" />
+      <p className="min-w-px flex-1 text-[16px] leading-[24px] text-[#80610f]">
+        Thanks! Your take just helped 3 parents deciding right now! Keep up the good work!
+      </p>
+    </div>
+  )
+}
+
+const HEY =
+  "Hey! You're browsing baby bottles now - but you saved the UPPAbaby Vista three weeks ago. Did you end up buying it? 20 seconds here helps other parents like you choose."
+
+/** Connie chat tab — the completed post-purchase check-in as a chat thread. */
+export function ChatScreen() {
+  const navigate = useNavigate()
+  return (
+    <FigmaFrame bg="#f1f1f2">
+      <Backdrop />
+      <NaviRail />
+
+      <div
+        className="absolute flex flex-col items-start overflow-clip rounded-md border border-border-subtle bg-bg-primary p-[36px] shadow-panel"
+        style={{ left: 885, top: 50, width: 520, height: 800 }}
+      >
+        {/* Header */}
+        <div className="flex w-full shrink-0 items-center gap-[10px] overflow-clip px-[20px] py-[18px]">
+          <div className="relative size-[34px] shrink-0 overflow-clip rounded-[8px] bg-fg-primary">
+            <span className="absolute left-[10px] top-[6px] whitespace-nowrap text-[18px] font-semibold leading-[22px] tracking-[-0.25px] text-white">
+              C
+            </span>
+          </div>
+          <div className="flex min-w-px flex-1 flex-col items-start overflow-clip whitespace-nowrap">
+            <p className="text-[16px] font-semibold leading-[24px] text-fg-primary">Connie</p>
+            <p className="text-[14px] leading-[20px] text-fg-secondary">Consumer Reports</p>
+          </div>
+          <button
+            aria-label="Close"
+            onClick={() => navigate(routes.postPurchase)}
+            className="relative size-[20px] shrink-0"
+          >
+            <img alt="" src={asset.close} className="absolute inset-0 block size-full" />
+          </button>
+        </div>
+        <div className="h-px w-full shrink-0 bg-border-subtle" />
+
+        {/* Thread */}
+        <div className="flex min-h-px w-full flex-1 flex-col items-start gap-[14px] overflow-y-auto overflow-x-clip p-[20px]">
+          <BotBubble>{HEY}</BotBubble>
+          <ProductCard />
+          <ChipRow>
+            <Chip label="Yes - I bought it " state="selected" />
+            <Chip label="Not yet" />
+            <Chip label="Bought a different one" />
+            <Chip label="Other" />
+          </ChipRow>
+          <UserBubble>Yes - I bought it</UserBubble>
+
+          <BotBubble>How's it treating you?</BotBubble>
+          <ChipRow>
+            <Chip label="Love it" state="selected" />
+            <Chip label="It's fine" />
+            <Chip label="Not what I hoped" />
+            <Chip label="Other" />
+          </ChipRow>
+          <UserBubble>Love it - worth every penny</UserBubble>
+
+          <BotBubble>Love that. Quick one - what would've made it even better?</BotBubble>
+          <ChipRow>
+            <Chip label="Fold & portability" />
+            <Chip label="Comfort" />
+            <Chip label="Durability" state="selected" />
+            <Chip label="Other" />
+          </ChipRow>
+
+          <ThanksBanner />
+
+          {/* Composer */}
+          <div className="flex w-full shrink-0 items-center gap-[10px] overflow-clip rounded-pill bg-bg-secondary py-[10px] pl-[18px] pr-[10px]">
+            <p className="min-w-px flex-1 text-[16px] leading-[24px] text-fg-secondary">
+              Add anything in your own words…
+            </p>
+            <div className="relative size-[40px] shrink-0 overflow-clip rounded-pill bg-fg-primary">
+              <img alt="" src={asset.send} className="absolute left-[10px] top-[10px] size-[20px]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </FigmaFrame>
+  )
+}
