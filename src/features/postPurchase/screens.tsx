@@ -1,6 +1,11 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
+import { callConnie } from '@/api/connieClient'
+import { isPostPurchase, type CommunityStat } from '@/types/connie-contract'
+
+/** The product this check-in is about (matches the saved ProductCard). */
+const LIVE_PRODUCT = 'UppaBaby Vista V2'
 
 /* ---------- Post-Purchase asset paths (public/figma, prefix pp-) ---------- */
 const asset = {
@@ -210,12 +215,14 @@ function InputBar() {
 }
 
 /** Community-impact confirmation banner (1052:5181). */
-function ThanksBanner() {
+function ThanksBanner({ stat }: { stat?: CommunityStat | null }) {
   return (
     <div className="flex w-full shrink-0 items-center gap-[10px] overflow-clip rounded-md bg-[#f2eddb] py-[13px] pl-[15px] pr-[16px]">
       <img alt="" src={asset.bannerStar} className="size-[20px] shrink-0" />
       <p className="min-w-px flex-1 text-[16px] leading-[24px] text-[#80610f]">
-        Thanks! Your take just helped 3 parents deciding right now! Keep up the good work!
+        {stat
+          ? `Thanks! ${stat.percent}% ${stat.statement}`
+          : 'Thanks! Your take just helped 3 parents deciding right now! Keep up the good work!'}
       </p>
     </div>
   )
@@ -238,6 +245,31 @@ export function PostPurchaseScreen() {
     p.set('step', String(next))
     setParams(p, { replace: true })
   }
+
+  // Fetch the live check-in once (guard against StrictMode double-invoke). Baked copy shows
+  // until it returns, then live message + sentiment options swap in.
+  const [checkInMsg, setCheckInMsg] = useState<string | null>(null)
+  const [sentiments, setSentiments] = useState<string[] | null>(null)
+  const [stat, setStat] = useState<CommunityStat | null>(null)
+  const didFetch = useRef(false)
+  useEffect(() => {
+    if (didFetch.current) return
+    didFetch.current = true
+    callConnie({ message: `How's my ${LIVE_PRODUCT} working out?` })
+      .then((r) => {
+        if (isPostPurchase(r)) {
+          setCheckInMsg(r.post_purchase.message)
+          if (r.post_purchase.sentiment_options.length > 0) {
+            setSentiments(r.post_purchase.sentiment_options)
+          }
+          setStat(r.post_purchase.community_stat)
+        }
+      })
+      .catch(() => {
+        /* keep baked content on error */
+      })
+  }, [])
+  const sentimentChips = sentiments ?? ['Love it', "It's fine", 'Not what I hoped']
 
   // Panel visibility + position per frame.
   const panelOpen = step !== 0 && step !== 4
@@ -291,25 +323,18 @@ export function PostPurchaseScreen() {
           {/* Q2 — How's it treating you? (PP3 onward) */}
           {step >= 3 && (
             <>
-              <BotBubble>How's it treating you?</BotBubble>
-              {step === 3 ? (
-                <ChipRow>
-                  <Chip label="Love it" state="active" />
-                  <Chip label="It's fine" />
-                  <Chip label="Not what I hoped" />
-                  <Chip label="Other" />
-                </ChipRow>
-              ) : (
-                <>
-                  <ChipRow>
-                    <Chip label="Love it" state="selected" />
-                    <Chip label="It's fine" />
-                    <Chip label="Not what I hoped" />
-                    <Chip label="Other" />
-                  </ChipRow>
-                  <UserBubble>Love it - worth every penny</UserBubble>
-                </>
-              )}
+              <BotBubble>{checkInMsg ?? "How's it treating you?"}</BotBubble>
+              <ChipRow>
+                {sentimentChips.map((label, i) => (
+                  <Chip
+                    key={label}
+                    label={label}
+                    state={i === 0 ? (step === 3 ? 'active' : 'selected') : 'default'}
+                  />
+                ))}
+                <Chip label="Other" />
+              </ChipRow>
+              {step >= 4 && <UserBubble>{sentimentChips[0]}</UserBubble>}
             </>
           )}
 
@@ -327,7 +352,7 @@ export function PostPurchaseScreen() {
           )}
 
           {/* Confirmation banner (PP9) */}
-          {step === 7 && <ThanksBanner />}
+          {step === 7 && <ThanksBanner stat={stat} />}
 
           <InputBar />
         </ConniePanel>
