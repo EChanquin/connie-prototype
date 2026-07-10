@@ -7,6 +7,7 @@ import { cn } from '@/lib/cn'
 import { callConnie } from '@/api/connieClient'
 import { isInlineAnnotations, type Evidence, type InlineAnnotation } from '@/types/connie-contract'
 import { cleanEvidence } from '@/lib/sourceFilter'
+import { usePreferences } from '@/store/usePreferences'
 
 /* ---------- Annotation asset paths (public/figma) ---------- */
 const asset = {
@@ -270,6 +271,7 @@ export function AnnotationsScreen() {
   const annComm = valid(annById['verified_by_community_only'])
   const annMis = valid(annById['misleading'])
   const annUnv = annById['unverifiable'] // unverifiable is evidence-free by design
+  const connected = usePreferences((s) => s.sources) // communities picked in onboarding
 
   return (
     <FigmaFrame backdrop={asset.backdrop} backdropOpacity={state === 'base' ? 1 : 0.7}>
@@ -309,12 +311,14 @@ export function AnnotationsScreen() {
                 quote={crPaddingQuote}
                 chip="Baby Trend Stroller Review"
               />
-              <SourceCard
-                avatar={asset.avatarReddit}
-                name="Reddit"
-                quote={redditComfyQuote}
-                chip="Best Strollers: Thread"
-              />
+              {connected.includes('Reddit') && (
+                <SourceCard
+                  avatar={asset.avatarReddit}
+                  name="Reddit"
+                  quote={redditComfyQuote}
+                  chip="Best Strollers: Thread"
+                />
+              )}
             </SourceRow>
           )}
         </Callout>
@@ -336,21 +340,25 @@ export function AnnotationsScreen() {
             <LiveSources evidence={annComm.evidence} />
           ) : (
             <SourceRow>
-              <SourceCard
-                avatar={asset.avatarReddit}
-                name="Reddit"
-                quote={redditComfyQuoteAlt}
-                chip="Best Strollers: Thread"
-                fixed={false}
-              />
-              <SourceCard
-                avatar={asset.avatarInstagram}
-                name="Instagram"
-                quote={instagramQuote}
-                chip="@dad_at_home’s post"
-                ring={false}
-                fixed={false}
-              />
+              {connected.includes('Reddit') && (
+                <SourceCard
+                  avatar={asset.avatarReddit}
+                  name="Reddit"
+                  quote={redditComfyQuoteAlt}
+                  chip="Best Strollers: Thread"
+                  fixed={false}
+                />
+              )}
+              {connected.includes('Instagram') && (
+                <SourceCard
+                  avatar={asset.avatarInstagram}
+                  name="Instagram"
+                  quote={instagramQuote}
+                  chip="@dad_at_home’s post"
+                  ring={false}
+                  fixed={false}
+                />
+              )}
             </SourceRow>
           )}
         </Callout>
