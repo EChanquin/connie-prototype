@@ -470,9 +470,8 @@ const COMMUNITIES = [
 
 export function SurveyCommunitiesScreen() {
   const navigate = useNavigate()
-  const [selected, setSelected] = useState<string[]>([])
-  const toggle = (n: string) =>
-    setSelected((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n]))
+  const selected = usePreferences((s) => s.sources)
+  const toggle = usePreferences((s) => s.toggleSource)
   const canContinue = selected.length > 0
   return (
     <FigmaFrame backdrop={onboardingGoogleBg}>

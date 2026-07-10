@@ -306,7 +306,25 @@ function Chip({ img, label, pencil = true }: { img?: string; label: string; penc
   )
 }
 
-function BasedOnPopover({ onClose, preferences }: { onClose: () => void; preferences: string[] }) {
+/** Community source name -> icon (shared onboarding assets). CR is always shown. */
+const COMMUNITY_ICON: Record<string, string> = {
+  Instagram: '/figma/comm-instagram.png',
+  Reddit: '/figma/comm-reddit.svg',
+  YouTube: '/figma/comm-youtube.svg',
+  Tiktok: '/figma/comm-tiktok.svg',
+  Pinterest: '/figma/comm-pinterest.svg',
+  'Online blogs': '/figma/comm-google.svg',
+}
+
+function BasedOnPopover({
+  onClose,
+  preferences,
+  sources,
+}: {
+  onClose: () => void
+  preferences: string[]
+  sources: string[]
+}) {
   return (
     <div
       className="absolute z-20 flex flex-col gap-[8px] overflow-hidden rounded-[16px] border-[0.5px] border-border-subtle bg-bg-secondary pb-[16px] pl-[32px] pr-[40px] pt-[24px] shadow-[0px_0px_15px_0px_rgba(5,5,0,0.16)]"
@@ -320,9 +338,10 @@ function BasedOnPopover({ onClose, preferences }: { onClose: () => void; prefere
               <img src={`${A}link.svg`} alt="" className="size-[18px]" />
               <span className="text-[16px] leading-[24px] text-fg-primary">Sources:</span>
             </div>
-            <div className="flex items-center gap-[8px]">
-              <Chip img={`${A}insta.png`} label="Instagram" />
-              <Chip img={av5} label="Reddit" />
+            <div className="flex flex-wrap items-center gap-[8px]">
+              {sources.map((s) => (
+                <Chip key={s} img={COMMUNITY_ICON[s]} label={s} />
+              ))}
             </div>
           </div>
           <div className="flex flex-col items-start pl-[94px]">
@@ -355,12 +374,14 @@ function RecommendedPanel({
   onClose,
   rows,
   preferences,
+  sources,
 }: {
   initialExpanded: number | null
   initialTooltip: boolean
   onClose: () => void
   rows: RowData[]
   preferences: string[]
+  sources: string[]
 }) {
   const [openRow, setOpenRow] = useState<number | null>(initialExpanded)
   const [tooltip, setTooltip] = useState(initialTooltip)
@@ -465,7 +486,9 @@ function RecommendedPanel({
         </button>
       </div>
 
-      {tooltip && <BasedOnPopover onClose={() => setTooltip(false)} preferences={preferences} />}
+      {tooltip && (
+        <BasedOnPopover onClose={() => setTooltip(false)} preferences={preferences} sources={sources} />
+      )}
     </>
   )
 }
@@ -684,6 +707,7 @@ export function ProductInsightsScreen() {
   // the baked rows show so the screen never breaks; live data swaps in when it arrives.
   const [liveRows, setLiveRows] = useState<RowData[] | null>(null)
   const preferences = usePreferences((s) => s.preferences)
+  const sources = usePreferences((s) => s.sources)
   const didFetch = useRef(false)
   useEffect(() => {
     // Fire exactly once — guard against React 18 StrictMode double-invoking the effect,
@@ -717,6 +741,7 @@ export function ProductInsightsScreen() {
           onClose={() => setVariant('collapsed')}
           rows={panelRows}
           preferences={preferences}
+          sources={sources}
         />
       )}
 
