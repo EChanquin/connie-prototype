@@ -5,6 +5,7 @@ import { routes } from '@/app/routes'
 import { callConnie } from '@/api/connieClient'
 import { isProductInsights, type ProductInsightsPayload } from '@/types/connie-contract'
 import { usePreferences, preferencesToPriorities } from '@/store/usePreferences'
+import { communityPosts, type CommunitySource } from '@/mocks/communityPosts'
 
 /** The product this "page" is about — drives the live product_insights request. */
 const LIVE_PRODUCT = 'UPPAbaby Vista V2'
@@ -199,22 +200,44 @@ const SOURCE_AVATAR: Record<string, string> = {
   web: `${A}link.svg`,
 }
 
-function insightsToRows(payload: ProductInsightsPayload): RowData[] {
+/** Avatars for the illustrative community posts. */
+const COMMUNITY_AVATAR: Record<CommunitySource, string> = {
+  Instagram: `${A}insta.png`,
+  Reddit: av5,
+}
+
+/**
+ * Build rows from the live product_insights payload, and append ILLUSTRATIVE community posts
+ * (Instagram/Reddit) for the sources the shopper connected in onboarding. Real CR + web evidence
+ * always comes first; community posts are authored samples (see mocks/communityPosts.ts).
+ */
+function insightsToRows(payload: ProductInsightsPayload, connectedSources: string[]): RowData[] {
   return payload.insights.map((ins) => {
     const meta = CATEGORY_ICON[ins.category] ?? { icon: `${A}toprated.svg`, size: 20 }
     const evidence = ins.evidence ?? []
+    const realDetail = evidence.map((e) => ({
+      source: e.source_name,
+      text: e.quote,
+      chipImg: SOURCE_AVATAR[e.source_type] ?? av5,
+      chipLabel: e.source_name,
+    }))
+    const communityDetail = (communityPosts[ins.category] ?? [])
+      .filter((p) => connectedSources.includes(p.source))
+      .map((p) => ({
+        source: p.source,
+        text: p.quote,
+        chipImg: COMMUNITY_AVATAR[p.source],
+        chipLabel: p.handle,
+      }))
+    const detail = [...realDetail, ...communityDetail]
     return {
       icon: meta.icon,
       iconSize: meta.size,
       title: ins.label,
       subtitle: ins.summary,
-      sources: evidence.slice(0, 2).map((e) => SOURCE_AVATAR[e.source_type] ?? av5),
-      detail: evidence.map((e) => ({
-        source: e.source_name,
-        text: e.quote,
-        chipImg: SOURCE_AVATAR[e.source_type] ?? av5,
-        chipLabel: e.source_name,
-      })),
+      // Avatar stack: lead with a CR/web badge, then the connected community icons.
+      sources: [...new Set(detail.map((d) => d.chipImg))].slice(0, 2),
+      detail,
     }
   })
 }
@@ -720,7 +743,7 @@ export function ProductInsightsScreen() {
     })
       .then((r) => {
         if (isProductInsights(r) && r.product_insights.insights.length > 0) {
-          setLiveRows(insightsToRows(r.product_insights))
+          setLiveRows(insightsToRows(r.product_insights, sources))
         }
       })
       .catch(() => {
