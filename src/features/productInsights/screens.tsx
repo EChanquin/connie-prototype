@@ -190,12 +190,13 @@ const CATEGORY_ICON: Record<string, { icon: string; size: number }> = {
   value: { icon: `${A}toprated.svg`, size: 20 },
   comfort: { icon: `${A}cloud.svg`, size: 20 },
 }
-const av19 = `${A}av19.png`
+// Honest source badges: consumer_reports -> CR, reddit -> Reddit, web -> link glyph.
+// (Avoids the old decorative face that read as "Instagram" for web sources.)
 const SOURCE_AVATAR: Record<string, string> = {
   consumer_reports: av7,
   reddit: av5,
-  youtube: av18,
-  web: av19,
+  youtube: `${A}link.svg`,
+  web: `${A}link.svg`,
 }
 
 function insightsToRows(payload: ProductInsightsPayload): RowData[] {
