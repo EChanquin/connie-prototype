@@ -1,7 +1,16 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
+import { callConnie } from '@/api/connieClient'
+import {
+  isChat,
+  isDecisionSupport,
+  isPriorityInference,
+  isPostPurchase,
+  isProductInsights,
+  type ConnieResponse,
+} from '@/types/connie-contract'
 
 /* Chat 4 — Post-purchase in chat (1052:5908).
    The Figma frame is an empty placeholder, so this reproduces the "post-purchase
@@ -145,9 +154,126 @@ function ThanksBanner() {
 const HEY =
   "Hey! You're browsing baby bottles now - but you saved the UPPAbaby Vista three weeks ago. Did you end up buying it? 20 seconds here helps other parents like you choose."
 
-/** Connie chat tab — the completed post-purchase check-in as a chat thread. */
+/** Renders one live Connie response into the thread, reusing the designed bubbles/chips. */
+function ConnieReply({ res }: { res: ConnieResponse }) {
+  if (isChat(res)) return <BotBubble>{res.chat.message}</BotBubble>
+
+  if (isDecisionSupport(res)) {
+    const d = res.decision_support
+    return (
+      <div className="flex w-full flex-col items-start gap-[8px]">
+        <BotBubble>{d.cr_verdict ?? 'Here are the top picks, ranked:'}</BotBubble>
+        <div className="flex w-[340px] flex-col gap-[6px]">
+          {d.products.map((p) => (
+            <div key={p.product_name} className="rounded-[8px] border border-border-subtle bg-bg-primary px-[12px] py-[9px]">
+              <p className="text-[12px] font-semibold leading-[16px] text-fg-brand">{p.rank_label}</p>
+              <p className="text-[14px] leading-[20px] text-fg-primary">{p.product_name}</p>
+              <p className="text-[13px] leading-[18px] text-fg-secondary">
+                {p.price}
+                {p.retailer ? ` · ${p.retailer}` : ''}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isProductInsights(res)) {
+    const pi = res.product_insights
+    return (
+      <div className="flex w-full flex-col items-start gap-[8px]">
+        <BotBubble>{`${pi.product_name} — ${pi.verdict === 'recommended' ? 'Recommended' : 'Not recommended'}. Here's what stands out:`}</BotBubble>
+        <div className="flex w-[340px] flex-col gap-[6px]">
+          {pi.insights.map((ins, i) => (
+            <div key={i} className="rounded-[8px] border border-border-subtle bg-bg-primary px-[12px] py-[9px]">
+              <p className="text-[14px] font-semibold leading-[20px] text-fg-primary">{ins.label}</p>
+              <p className="text-[13px] leading-[18px] text-fg-secondary">{ins.summary}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isPriorityInference(res)) {
+    const p = res.priority_inference
+    return (
+      <div className="flex w-full flex-col items-start gap-[8px]">
+        <BotBubble>{p.message}</BotBubble>
+        {p.suggested_priorities.length > 0 && (
+          <ChipRow>
+            {p.suggested_priorities.map((s) => (
+              <Chip key={s} label={s} />
+            ))}
+          </ChipRow>
+        )}
+      </div>
+    )
+  }
+
+  if (isPostPurchase(res)) {
+    const pp = res.post_purchase
+    return (
+      <div className="flex w-full flex-col items-start gap-[8px]">
+        <BotBubble>{pp.message}</BotBubble>
+        {pp.sentiment_options.length > 0 && (
+          <ChipRow>
+            {pp.sentiment_options.map((s) => (
+              <Chip key={s} label={s} />
+            ))}
+          </ChipRow>
+        )}
+        {pp.community_stat && <BotBubble>{`${pp.community_stat.percent}% ${pp.community_stat.statement}`}</BotBubble>}
+      </div>
+    )
+  }
+
+  return <BotBubble>I've noted that — open the annotations view for the on-page details.</BotBubble>
+}
+
+/** Connie chat tab — a live, interactive conversation with the Connie backend. */
 export function ChatScreen() {
   const navigate = useNavigate()
+  const [messages, setMessages] = useState<{ id: number; node: ReactNode }[]>(() => [
+    {
+      id: 0,
+      node: (
+        <BotBubble>
+          Hi! I'm Connie. Ask me about any stroller, tell me your priorities, or say "rank these strollers for me."
+        </BotBubble>
+      ),
+    },
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const idRef = useRef(1)
+  const threadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
+  }, [messages, loading])
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || loading) return
+    setMessages((m) => [...m, { id: idRef.current++, node: <UserBubble>{text}</UserBubble> }])
+    setInput('')
+    setLoading(true)
+    try {
+      const res = await callConnie({ message: text })
+      setMessages((m) => [...m, { id: idRef.current++, node: <ConnieReply res={res} /> }])
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error'
+      setMessages((m) => [
+        ...m,
+        { id: idRef.current++, node: <BotBubble>Sorry — I couldn't reach Connie just now. ({msg})</BotBubble> },
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <FigmaFrame bg="#f1f1f2">
       <Backdrop />
@@ -179,44 +305,38 @@ export function ChatScreen() {
         <div className="h-px w-full shrink-0 bg-border-subtle" />
 
         {/* Thread */}
-        <div className="flex min-h-px w-full flex-1 flex-col items-start gap-[14px] overflow-y-auto overflow-x-clip p-[20px]">
-          <BotBubble>{HEY}</BotBubble>
-          <ProductCard />
-          <ChipRow>
-            <Chip label="Yes - I bought it " state="selected" />
-            <Chip label="Not yet" />
-            <Chip label="Bought a different one" />
-            <Chip label="Other" />
-          </ChipRow>
-          <UserBubble>Yes - I bought it</UserBubble>
-
-          <BotBubble>How's it treating you?</BotBubble>
-          <ChipRow>
-            <Chip label="Love it" state="selected" />
-            <Chip label="It's fine" />
-            <Chip label="Not what I hoped" />
-            <Chip label="Other" />
-          </ChipRow>
-          <UserBubble>Love it - worth every penny</UserBubble>
-
-          <BotBubble>Love that. Quick one - what would've made it even better?</BotBubble>
-          <ChipRow>
-            <Chip label="Fold & portability" />
-            <Chip label="Comfort" />
-            <Chip label="Durability" state="selected" />
-            <Chip label="Other" />
-          </ChipRow>
-
-          <ThanksBanner />
-
-          {/* Composer */}
-          <div className="flex w-full shrink-0 items-center gap-[10px] overflow-clip rounded-pill bg-bg-secondary py-[10px] pl-[18px] pr-[10px]">
-            <p className="min-w-px flex-1 text-[16px] leading-[24px] text-fg-secondary">
-              Add anything in your own words…
-            </p>
-            <div className="relative size-[40px] shrink-0 overflow-clip rounded-pill bg-fg-primary">
-              <img alt="" src={asset.send} className="absolute left-[10px] top-[10px] size-[20px]" />
+        <div
+          ref={threadRef}
+          className="flex min-h-px w-full flex-1 flex-col items-start gap-[14px] overflow-y-auto overflow-x-clip p-[20px]"
+        >
+          {messages.map((m) => (
+            <div key={m.id} className="w-full">
+              {m.node}
             </div>
+          ))}
+          {loading && <BotBubble>Connie is thinking…</BotBubble>}
+        </div>
+
+        {/* Composer — real input */}
+        <div className="w-full shrink-0 px-[20px] pb-[4px] pt-[8px]">
+          <div className="flex w-full items-center gap-[10px] overflow-clip rounded-pill bg-bg-secondary py-[10px] pl-[18px] pr-[10px]">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void send()
+              }}
+              placeholder="Ask Connie anything…"
+              className="min-w-px flex-1 bg-transparent text-[16px] leading-[24px] text-fg-primary outline-none placeholder:text-fg-secondary"
+            />
+            <button
+              onClick={() => void send()}
+              disabled={loading}
+              aria-label="Send"
+              className="relative size-[40px] shrink-0 overflow-clip rounded-pill bg-fg-primary disabled:opacity-50"
+            >
+              <img alt="" src={asset.send} className="absolute left-[10px] top-[10px] size-[20px]" />
+            </button>
           </div>
         </div>
       </div>

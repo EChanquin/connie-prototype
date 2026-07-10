@@ -6,6 +6,7 @@ import { CRLauncher } from '@/components/connie/CRLauncher'
 import { IconX, IconCheck, IconInfo, IconStar, IconShare, IconCaretLeft, IconCaretRight } from '@/components/icons'
 import { routes } from '@/app/routes'
 import { useJourneyStore } from '@/store/useJourneyStore'
+import { usePreferences } from '@/store/usePreferences'
 
 /** Shared onboarding backdrop — the dimmed Google "best stroller 2026" page (from Figma). */
 export const onboardingGoogleBg = '/figma/onboarding-google-bg.png'
@@ -525,9 +526,8 @@ const PRIORITIES = [
 
 export function SurveyPrioritiesScreen() {
   const navigate = useNavigate()
-  const [selected, setSelected] = useState<string[]>([])
-  const toggle = (n: string) =>
-    setSelected((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n]))
+  const selected = usePreferences((s) => s.preferences)
+  const toggle = usePreferences((s) => s.togglePreference)
   return (
     <FigmaFrame backdrop={onboardingGoogleBg}>
       <Panel gap={24}>

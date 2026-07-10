@@ -1,7 +1,15 @@
-import { useState, type ReactNode, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
+import { callConnie } from '@/api/connieClient'
+import {
+  isDecisionSupport,
+  isProductInsights,
+  type DecisionSupportPayload,
+  type ProductInsightsPayload,
+} from '@/types/connie-contract'
+import { usePreferences, preferencesToPriorities } from '@/store/usePreferences'
 
 /* ------------------------------------------------------------------ *
  * Decision Support — faithful reproduction of Figma frames
@@ -229,6 +237,53 @@ const cards: Card[] = [
   },
 ]
 
+/* ----- map a live decision_support payload -> the screen's Card[] ----- */
+function productImage(name: string): string {
+  const n = name.toLowerCase()
+  if (n.includes('city mini')) return asset.prodCity
+  return asset.prodVista // only two product photos exist; default to the Vista shot
+}
+
+function productsToCards(payload: DecisionSupportPayload): Card[] {
+  return payload.products.map((p) => {
+    const badges = p.evidence_badges ?? []
+    const why =
+      p.recommendation_rationale ??
+      `${p.specs.fold} fold · ${p.specs.weight} · ${p.specs.terrain}`
+    return {
+      id: p.product_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `rank-${p.rank}`,
+      img: productImage(p.product_name),
+      rank: p.rank_label,
+      rankBrand: p.rank === 1,
+      title: p.product_name,
+      price: p.price,
+      at: p.retailer ? `AT ${p.retailer.toUpperCase()}` : '',
+      why,
+      whyLong: why,
+      chips: badges.map((b) => ({
+        img: /cr |consumer reports|lab/i.test(b) ? asset.avCr : asset.avReddit,
+        label: b,
+      })),
+      primaryBtn: p.rank === 1,
+    }
+  })
+}
+
+function productsToTableRows(payload: DecisionSupportPayload): TableRow[] {
+  return payload.products.map((p) => {
+    const notRec = /not recommended/i.test(p.rank_label)
+    return {
+      name: p.product_name,
+      badge: p.rank === 1 ? 'BEST' : p.rank === 2 ? 'RUNNER' : notRec ? 'NOT REC' : undefined,
+      badgeType: p.rank === 1 ? 'best' : p.rank === 2 ? 'runner' : notRec ? 'notrec' : undefined,
+      fold: p.specs.fold,
+      weight: p.specs.weight,
+      terrain: p.specs.terrain !== 'Pavement only',
+      price: p.price,
+    }
+  })
+}
+
 /* ----------------------------------------------------------- Why-this-fits */
 function WhyThisFits({ text, pad = 9 }: { text: string; pad?: number }) {
   return (
@@ -262,12 +317,14 @@ function CompactCard({
   checked,
   onCheck,
   onReview,
+  onCompareHover,
   children,
 }: {
   card: Card
   checked: boolean
   onCheck: () => void
   onReview?: () => void
+  onCompareHover?: (hovering: boolean) => void
   children?: ReactNode
 }) {
   return (
@@ -299,7 +356,11 @@ function CompactCard({
             <p className="text-[14px] font-semibold leading-[20px] text-fg-primary">{card.title}</p>
             <div className="flex items-center gap-[9px]">
               <span className="text-[14px] leading-[20px] text-fg-primary">{card.price}</span>
-              <div className="flex rounded-[4px] bg-border-subtle px-[8px] py-[4px]">
+              <div
+                className="flex cursor-pointer rounded-[4px] bg-border-subtle px-[8px] py-[4px]"
+                onMouseEnter={() => onCompareHover?.(true)}
+                onMouseLeave={() => onCompareHover?.(false)}
+              >
                 <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">{card.at}</span>
               </div>
             </div>
@@ -339,11 +400,19 @@ const retailers: Retailer[] = [
   { name: 'BuyBuy Baby', price: '$999.00', deal: 'FREE SHIPPING', dealColor: 'text-fg-secondary', primary: false },
 ]
 
-function ComparePopover({ onClose }: { onClose: () => void }) {
+function ComparePopover({
+  onClose,
+  onHover,
+}: {
+  onClose: () => void
+  onHover?: (hovering: boolean) => void
+}) {
   return (
     <div
       className="absolute z-20 flex flex-col gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       style={{ right: 70, top: 276, width: 288 }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
     >
       <div className="flex items-center justify-between">
         <span className="text-[14px] leading-[20px] text-fg-primary">Compare Prices</span>
@@ -429,20 +498,21 @@ function TableBadge({ row }: { row: TableRow }) {
 }
 
 /** Insight callout — gradient "CR Verdict" banner (Figma 1052:3959). */
-function InsightCallout() {
+function InsightCallout({ verdict }: { verdict?: string | null }) {
   return (
     <div className="flex w-full shrink-0 items-start gap-[12px] rounded-[16px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] p-[16px]">
       <img src={`${I}info.svg`} alt="" className="size-[20px] shrink-0" />
       <p className="flex-1 text-[16px] leading-[24px] text-fg-primary">
-        CR Verdict: The Vista V2 is heavier but offers superior durability and all-terrain performance which matches
-        your "Rural/Active" preference profile.
+        {verdict
+          ? `CR Verdict: ${verdict}`
+          : 'CR Verdict: The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your "Rural/Active" preference profile.'}
       </p>
     </div>
   )
 }
 
 /** Standard (transposed) comparison table — Figma 1052:3974. */
-function StandardTable() {
+function StandardTable({ rows }: { rows: TableRow[] }) {
   const th = 'flex flex-col justify-center border-b border-border-subtle px-[8px] pb-[9px] pt-[8px] text-[12px] font-semibold leading-[16px] text-fg-primary'
   const td = 'flex flex-col justify-center border-b border-border-subtle px-[8px] pb-[13.5px] pt-[11.5px] text-[12px] font-semibold leading-[16px] text-fg-primary'
   return (
@@ -457,7 +527,7 @@ function StandardTable() {
       </div>
       {/* body */}
       <div className="flex w-full flex-col bg-bg-primary">
-        {tableRows.map((r) => (
+        {rows.map((r) => (
           <div key={r.name} className="flex w-full items-stretch justify-center">
             <div className="flex w-[119.31px] flex-col items-start justify-center gap-[2px] border-b border-border-subtle px-[8px] py-[10px]">
               <span className="text-[14px] leading-[20px] text-fg-primary">{r.name}</span>
@@ -477,7 +547,7 @@ function StandardTable() {
 }
 
 /** Wide table w/ thumbnail column — Expanded Table View (Figma 1052:5541). */
-function ExpandedTable() {
+function ExpandedTable({ rows }: { rows: TableRow[] }) {
   const th = 'border-b border-border-subtle px-[12px] pb-[10px] pt-[10px] text-[12px] font-semibold leading-[16px] text-fg-secondary'
   const cellPad = 'border-b border-border-subtle px-[12px] py-[16px]'
   return (
@@ -491,7 +561,7 @@ function ExpandedTable() {
         <div className={`${th} w-[120px] text-left`}>Price</div>
       </div>
       <div className="flex w-full flex-col">
-        {tableRows.map((r) => (
+        {rows.map((r) => (
           <div key={r.name} className="flex w-full items-center">
             <div className={`${cellPad} w-[90px]`}>
               <div
@@ -520,22 +590,22 @@ function ExpandedTable() {
 }
 
 /** Featured verdict banner atop the Expanded Table View. */
-function ExpandedVerdictBanner() {
+function ExpandedVerdictBanner({ product, verdict }: { product?: Card; verdict?: string | null }) {
   return (
     <div className="flex w-full shrink-0 items-center gap-[16px] rounded-[16px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] p-[16px]">
       <div className="flex size-[64px] shrink-0 items-center justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
-        <img src={asset.prodVista} alt="" className="size-full object-cover" />
+        <img src={product?.img ?? asset.prodVista} alt="" className="size-full object-cover" />
       </div>
       <div className="flex w-[200px] shrink-0 flex-col gap-[4px]">
         <div className="flex w-fit rounded-[4px] bg-bg-brand-muted px-[8px] py-[2px]">
           <span className="text-[12px] font-semibold leading-[16px] text-fg-brand">CR Verdict</span>
         </div>
-        <p className="text-[18px] font-semibold leading-[22px] text-fg-primary">UppaBaby Vista V2</p>
-        <p className="text-[14px] leading-[20px] text-fg-primary">$999.00</p>
+        <p className="text-[18px] font-semibold leading-[22px] text-fg-primary">{product?.title ?? 'UppaBaby Vista V2'}</p>
+        <p className="text-[14px] leading-[20px] text-fg-primary">{product?.price ?? '$999.00'}</p>
       </div>
       <p className="flex-1 text-[16px] leading-[24px] text-fg-secondary">
-        The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your
-        "Rural/Active" preference profile.
+        {verdict ??
+          'The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your "Rural/Active" preference profile.'}
       </p>
     </div>
   )
@@ -689,6 +759,24 @@ const detailRows: DetailRow[] = [
   { icon: `${I}fold.svg`, iconSize: 28, title: 'No-Fuss Fold', subtitle: 'Snaps open and folds shut in seconds — one hand, no wrestling.' },
 ]
 
+/** Map a live product_insights payload -> the deep-dive's DetailRow[]. */
+const DEEP_DIVE_ICON: Record<string, { icon: string; size: number }> = {
+  safety: { icon: `${I}toprated.svg`, size: 20 },
+  maneuverability: { icon: `${I}city.svg`, size: 18 },
+  fold: { icon: `${I}fold.svg`, size: 28 },
+  ease_of_use: { icon: `${I}sketch.svg`, size: 20 },
+  service: { icon: `${I}sketch.svg`, size: 20 },
+  durability: { icon: `${I}sketch.svg`, size: 20 },
+  value: { icon: `${I}toprated.svg`, size: 20 },
+  comfort: { icon: `${I}cloud.svg`, size: 20 },
+}
+function insightsToDetailRows(payload: ProductInsightsPayload): DetailRow[] {
+  return payload.insights.map((ins) => {
+    const meta = DEEP_DIVE_ICON[ins.category] ?? { icon: `${I}toprated.svg`, size: 20 }
+    return { icon: meta.icon, iconSize: meta.size, title: ins.label, subtitle: ins.summary }
+  })
+}
+
 function DeepDiveRow({ row, first, last }: { row: DetailRow; first: boolean; last: boolean }) {
   const [open, setOpen] = useState(false)
   return (
@@ -731,7 +819,25 @@ function DeepDiveRow({ row, first, last }: { row: DetailRow; first: boolean; las
   )
 }
 
-function DetailedDeepDive({ onBack }: { onBack: () => void }) {
+function DetailedDeepDive({ onBack, product }: { onBack: () => void; product?: string | null }) {
+  // Fetch the full review (product_insights) for the reviewed product, once.
+  const [liveRows, setLiveRows] = useState<DetailRow[] | null>(null)
+  const didFetch = useRef(false)
+  useEffect(() => {
+    if (didFetch.current || !product) return
+    didFetch.current = true
+    callConnie({ message: `What are the key insights on the ${product}?` })
+      .then((r) => {
+        if (isProductInsights(r) && r.product_insights.insights.length > 0) {
+          setLiveRows(insightsToDetailRows(r.product_insights))
+        }
+      })
+      .catch(() => {
+        /* keep baked rows on error */
+      })
+  }, [product])
+  const rows = liveRows ?? detailRows
+
   return (
     <div className="flex w-full flex-1 flex-col gap-[20px] overflow-auto pt-[8px]">
       {/* RECOMMENDED + Save */}
@@ -765,8 +871,8 @@ function DetailedDeepDive({ onBack }: { onBack: () => void }) {
 
       {/* rows */}
       <div className="flex w-full flex-col">
-        {detailRows.map((r, i) => (
-          <DeepDiveRow key={r.title} row={r} first={i === 0} last={i === detailRows.length - 1} />
+        {rows.map((r, i) => (
+          <DeepDiveRow key={r.title} row={r} first={i === 0} last={i === rows.length - 1} />
         ))}
       </div>
 
@@ -817,6 +923,34 @@ export function DecisionSupportScreen() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showDetails, setShowDetails] = useState(true)
+  const [hoverCompare, setHoverCompare] = useState(false)
+
+  // Fetch the live ranking once (guard against StrictMode double-invoke). Until it returns,
+  // the baked data shows so the screen never breaks; live data swaps in when it arrives.
+  const [livePayload, setLivePayload] = useState<DecisionSupportPayload | null>(null)
+  const [reviewProduct, setReviewProduct] = useState<string | null>(null)
+  const preferences = usePreferences((s) => s.preferences)
+  const didFetch = useRef(false)
+  useEffect(() => {
+    if (didFetch.current) return
+    didFetch.current = true
+    callConnie({
+      message: 'Rank these strollers for me',
+      priorities: preferencesToPriorities(preferences) || undefined,
+    })
+      .then((r) => {
+        if (isDecisionSupport(r) && r.decision_support.products.length > 0) {
+          setLivePayload(r.decision_support)
+        }
+      })
+      .catch(() => {
+        /* keep baked data on error */
+      })
+  }, [])
+  const activeCards = livePayload ? productsToCards(livePayload) : cards
+  const activeTableRows = livePayload ? productsToTableRows(livePayload) : tableRows
+  const liveVerdict = livePayload?.cr_verdict ?? null
+  const topCard = activeCards[0]
 
   const setView = (v: View) => {
     params.set('view', v)
@@ -841,8 +975,8 @@ export function DecisionSupportScreen() {
       n.has(id) ? n.delete(id) : n.add(id)
       return n
     })
-  const allChecked = cards.every((c) => selected.has(c.id))
-  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(cards.map((c) => c.id)))
+  const allChecked = activeCards.every((c) => selected.has(c.id))
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(activeCards.map((c) => c.id)))
 
   const panelWidth = expanded ? 900 : 520
   const panelLeft = 1440 - 16 - panelWidth // right-aligned inside p-16 body
@@ -872,7 +1006,7 @@ export function DecisionSupportScreen() {
         break
       case 'editable':
         p.set('view', 'cards')
-        setSelected(new Set(cards.map((c) => c.id)))
+        setSelected(new Set(activeCards.map((c) => c.id)))
         break
       case 'compare':
         p.set('view', 'cards')
@@ -888,12 +1022,12 @@ export function DecisionSupportScreen() {
       case 'xcards':
         p.set('view', 'cards')
         p.set('expanded', '1')
-        setSelected(new Set(cards.map((c) => c.id)))
+        setSelected(new Set(activeCards.map((c) => c.id)))
         break
       case 'xtable':
         p.set('view', 'table')
         p.set('expanded', '1')
-        setSelected(new Set(cards.map((c) => c.id)))
+        setSelected(new Set(activeCards.map((c) => c.id)))
         break
     }
     setParams(p, { replace: true })
@@ -917,7 +1051,7 @@ export function DecisionSupportScreen() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
                 </button>
                 <div className="flex flex-col">
-                  <span className="text-[16px] font-semibold leading-[22px] text-fg-primary">UppaBaby Vista V2</span>
+                  <span className="text-[16px] font-semibold leading-[22px] text-fg-primary">{reviewProduct ?? 'UppaBaby Vista V2'}</span>
                   <span className="text-[14px] leading-[20px] text-fg-secondary">Full Review Deep-dive</span>
                 </div>
               </div>
@@ -925,7 +1059,7 @@ export function DecisionSupportScreen() {
                 <img src={asset.close} alt="" className="size-[16px]" />
               </button>
             </div>
-            <DetailedDeepDive onBack={() => setMode(null)} />
+            <DetailedDeepDive onBack={() => setMode(null)} product={reviewProduct} />
           </>
         ) : (
           <>
@@ -940,31 +1074,39 @@ export function DecisionSupportScreen() {
             <div className="flex w-full flex-1 flex-col gap-[20px] overflow-auto pb-[24px] pt-[8px]">
               {view === 'table' ? (
                 <>
-                  {expanded ? <ExpandedVerdictBanner /> : <InsightCallout />}
+                  {expanded ? (
+                    <ExpandedVerdictBanner product={topCard} verdict={liveVerdict} />
+                  ) : (
+                    <InsightCallout verdict={liveVerdict} />
+                  )}
                   <SelectionHeader expanded={expanded} allChecked={allChecked} toggleAll={toggleAll} />
-                  {expanded ? <ExpandedTable /> : <StandardTable />}
+                  {expanded ? <ExpandedTable rows={activeTableRows} /> : <StandardTable rows={activeTableRows} />}
                 </>
               ) : (
                 <>
                   <SelectionHeader expanded={expanded} allChecked={allChecked} toggleAll={toggleAll} />
                   {expanded
-                    ? cards.map((c) => (
+                    ? activeCards.map((c, i) => (
                         <ExpandedCard
                           key={c.id}
                           card={c}
                           checked={selected.has(c.id)}
                           onCheck={() => toggle(c.id)}
-                          showDetails={c.id === 'vista' ? showDetails : false}
+                          showDetails={i === 0 ? showDetails : false}
                           onToggleDetails={() => setShowDetails((s) => !s)}
                         />
                       ))
-                    : cards.map((c) => (
+                    : activeCards.map((c) => (
                         <CompactCard
                           key={c.id}
                           card={c}
                           checked={selected.has(c.id)}
                           onCheck={() => toggle(c.id)}
-                          onReview={() => setMode('detailed')}
+                          onReview={() => {
+                            setReviewProduct(c.title)
+                            setMode('detailed')
+                          }}
+                          onCompareHover={setHoverCompare}
                         />
                       ))}
                 </>
@@ -974,9 +1116,10 @@ export function DecisionSupportScreen() {
         )}
       </div>
 
-      {/* Compare Prices popover — frame-level overlay (Figma 1052:4619) */}
-      {mode === 'compare' && view === 'cards' && !expanded && (
-        <ComparePopover onClose={() => setMode(null)} />
+      {/* Compare Prices popover — frame-level overlay (Figma 1052:4619).
+          Shows on Compare mode OR when hovering a card's retailer chip. Prices are static. */}
+      {(mode === 'compare' || hoverCompare) && view === 'cards' && !expanded && (
+        <ComparePopover onClose={() => setMode(null)} onHover={setHoverCompare} />
       )}
 
       <NaviBar style={{ left: 62, top: 300 }} />
