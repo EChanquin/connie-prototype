@@ -751,7 +751,14 @@ function ExpandedCard({
 }
 
 /* --------------------------------------------------- Detailed deep-dive */
-type DetailRow = { icon: string; iconSize: number; title: string; subtitle: string }
+type DeepDiveSource = { avatar: string; name: string; quote: string }
+type DetailRow = {
+  icon: string
+  iconSize: number
+  title: string
+  subtitle: string
+  sources?: DeepDiveSource[] // real evidence (live rows only; baked rows use the generic fallback)
+}
 const detailRows: DetailRow[] = [
   { icon: `${I}toprated.svg`, iconSize: 20, title: 'Top Rated', subtitle: 'No bumps in the road here. CR and parents agree: this one earns its reputation.' },
   { icon: `${I}city.svg`, iconSize: 18, title: 'City Certified', subtitle: 'Built for the urban jungle. Handles sidewalks and curbs effortlessly and folds compactly.' },
@@ -771,13 +778,31 @@ const DEEP_DIVE_ICON: Record<string, { icon: string; size: number }> = {
   value: { icon: `${I}toprated.svg`, size: 20 },
   comfort: { icon: `${I}cloud.svg`, size: 20 },
 }
+const DD_AVATAR: Record<string, string> = {
+  consumer_reports: `${I}av7.png`,
+  reddit: `${I}av5.png`,
+  web: `${I}link.svg`,
+  youtube: `${I}link.svg`,
+}
+const DD_LABEL: Record<string, string> = {
+  consumer_reports: 'Consumer Reports',
+  reddit: 'Reddit',
+  web: 'Web',
+  youtube: 'YouTube',
+}
+
 function insightsToDetailRows(payload: ProductInsightsPayload): DetailRow[] {
   return payload.insights
     // Same rule as Product Insights: no insight without real (non-youtube/competitor) evidence.
     .filter((ins) => cleanEvidence(ins.evidence ?? []).length > 0)
     .map((ins) => {
       const meta = DEEP_DIVE_ICON[ins.category] ?? { icon: `${I}toprated.svg`, size: 20 }
-      return { icon: meta.icon, iconSize: meta.size, title: ins.label, subtitle: ins.summary }
+      const sources = cleanEvidence(ins.evidence ?? []).map((e) => ({
+        avatar: DD_AVATAR[e.source_type] ?? `${I}link.svg`,
+        name: DD_LABEL[e.source_type] ?? e.source_name,
+        quote: e.quote,
+      }))
+      return { icon: meta.icon, iconSize: meta.size, title: ins.label, subtitle: ins.summary, sources }
     })
 }
 
@@ -809,14 +834,29 @@ function DeepDiveRow({ row, first, last }: { row: DetailRow; first: boolean; las
       </div>
       {open && (
         <div className="flex flex-col gap-[12px] border-t-[0.5px] border-[#dadada] px-[20px] pb-[16px] pt-[14px]">
-          <p className="text-[14px] leading-[20px] text-[#242424]">
-            CR's lab testers and community threads consistently rank this near the top for {row.title.toLowerCase()}.
-          </p>
-          <div className="flex w-fit items-center gap-[4px] rounded-full border border-border-subtle bg-white py-[4px] pl-[8px] pr-[12px]">
-            <img src={`${I}av7.png`} alt="" className="size-[16px] rounded-full border-[0.5px] border-white object-cover" />
-            <span className="whitespace-nowrap text-[11px] leading-[16px] text-[#222]">Consumer Reports</span>
-            <img src={`${I}arrowupright.svg`} alt="" className="size-[12px]" />
-          </div>
+          {row.sources && row.sources.length > 0 ? (
+            row.sources.map((s, i) => (
+              <div key={i} className="flex flex-col gap-[6px]">
+                <p className="text-[14px] leading-[20px] text-[#242424]">{s.quote}</p>
+                <div className="flex w-fit items-center gap-[4px] rounded-full border border-border-subtle bg-white py-[4px] pl-[8px] pr-[12px]">
+                  <img src={s.avatar} alt="" className="size-[16px] rounded-full border-[0.5px] border-white object-cover" />
+                  <span className="whitespace-nowrap text-[11px] leading-[16px] text-[#222]">{s.name}</span>
+                  <img src={`${I}arrowupright.svg`} alt="" className="size-[12px]" />
+                </div>
+              </div>
+            ))
+          ) : (
+            <>
+              <p className="text-[14px] leading-[20px] text-[#242424]">
+                CR's lab testers and community threads consistently rank this near the top for {row.title.toLowerCase()}.
+              </p>
+              <div className="flex w-fit items-center gap-[4px] rounded-full border border-border-subtle bg-white py-[4px] pl-[8px] pr-[12px]">
+                <img src={`${I}av7.png`} alt="" className="size-[16px] rounded-full border-[0.5px] border-white object-cover" />
+                <span className="whitespace-nowrap text-[11px] leading-[16px] text-[#222]">Consumer Reports</span>
+                <img src={`${I}arrowupright.svg`} alt="" className="size-[12px]" />
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
