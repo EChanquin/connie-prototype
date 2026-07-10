@@ -197,8 +197,8 @@ const AV: Record<string, string> = {
   consumer_reports: asset.avatarCr,
   reddit: asset.avatarReddit,
   instagram: asset.avatarInstagram,
-  youtube: asset.avatarReddit,
-  web: asset.avatarInstagram,
+  youtube: asset.link, // YouTube is banned in the prompt; neutral icon if it ever appears
+  web: asset.link, // honest: a web source shows a link glyph, not an Instagram face
 }
 const SOURCE_LABEL: Record<string, string> = {
   consumer_reports: 'Consumer Reports',
