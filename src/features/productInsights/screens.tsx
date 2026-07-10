@@ -4,6 +4,7 @@ import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
 import { callConnie } from '@/api/connieClient'
 import { isProductInsights, type ProductInsightsPayload } from '@/types/connie-contract'
+import { usePreferences, preferencesToPriorities } from '@/store/usePreferences'
 
 /** The product this "page" is about — drives the live product_insights request. */
 const LIVE_PRODUCT = 'UPPAbaby Vista V2'
@@ -304,7 +305,7 @@ function Chip({ img, label, pencil = true }: { img?: string; label: string; penc
   )
 }
 
-function BasedOnPopover({ onClose }: { onClose: () => void }) {
+function BasedOnPopover({ onClose, preferences }: { onClose: () => void; preferences: string[] }) {
   return (
     <div
       className="absolute z-20 flex flex-col gap-[8px] overflow-hidden rounded-[16px] border-[0.5px] border-border-subtle bg-bg-secondary pb-[16px] pl-[32px] pr-[40px] pt-[24px] shadow-[0px_0px_15px_0px_rgba(5,5,0,0.16)]"
@@ -332,9 +333,10 @@ function BasedOnPopover({ onClose }: { onClose: () => void }) {
             <img src={`${A}sliders.svg`} alt="" className="size-[20px]" />
             <span className="text-[16px] leading-[24px] text-fg-primary">Preferences:</span>
           </div>
-          <div className="flex items-center gap-[8px]">
-            <Chip label="Long-term reliability" />
-            <Chip label="Ease of use" />
+          <div className="flex flex-wrap items-center gap-[8px]">
+            {preferences.map((p) => (
+              <Chip key={p} label={p} />
+            ))}
           </div>
         </div>
       </div>
@@ -351,11 +353,13 @@ function RecommendedPanel({
   initialTooltip,
   onClose,
   rows,
+  preferences,
 }: {
   initialExpanded: number | null
   initialTooltip: boolean
   onClose: () => void
   rows: RowData[]
+  preferences: string[]
 }) {
   const [openRow, setOpenRow] = useState<number | null>(initialExpanded)
   const [tooltip, setTooltip] = useState(initialTooltip)
@@ -460,7 +464,7 @@ function RecommendedPanel({
         </button>
       </div>
 
-      {tooltip && <BasedOnPopover onClose={() => setTooltip(false)} />}
+      {tooltip && <BasedOnPopover onClose={() => setTooltip(false)} preferences={preferences} />}
     </>
   )
 }
@@ -678,13 +682,17 @@ export function ProductInsightsScreen() {
   // Fetch live product_insights on load. Until it returns (or if the backend is unreachable),
   // the baked rows show so the screen never breaks; live data swaps in when it arrives.
   const [liveRows, setLiveRows] = useState<RowData[] | null>(null)
+  const preferences = usePreferences((s) => s.preferences)
   const didFetch = useRef(false)
   useEffect(() => {
     // Fire exactly once — guard against React 18 StrictMode double-invoking the effect,
     // which would launch two heavy product_insights calls at once and trip the Vertex quota.
     if (didFetch.current) return
     didFetch.current = true
-    callConnie({ message: `What are the key insights on the ${LIVE_PRODUCT}?` })
+    callConnie({
+      message: `What are the key insights on the ${LIVE_PRODUCT}?`,
+      priorities: preferencesToPriorities(preferences) || undefined,
+    })
       .then((r) => {
         if (isProductInsights(r) && r.product_insights.insights.length > 0) {
           setLiveRows(insightsToRows(r.product_insights))
@@ -707,6 +715,7 @@ export function ProductInsightsScreen() {
           initialTooltip={variant === 'tooltip'}
           onClose={() => setVariant('collapsed')}
           rows={panelRows}
+          preferences={preferences}
         />
       )}
 

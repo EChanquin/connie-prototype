@@ -9,9 +9,7 @@ import {
   type DecisionSupportPayload,
   type ProductInsightsPayload,
 } from '@/types/connie-contract'
-
-/** Priorities used for the live ranking (would come from onboarding in the full flow). */
-const LIVE_PRIORITIES = 'Safety, Durability'
+import { usePreferences, preferencesToPriorities } from '@/store/usePreferences'
 
 /* ------------------------------------------------------------------ *
  * Decision Support — faithful reproduction of Figma frames
@@ -931,11 +929,15 @@ export function DecisionSupportScreen() {
   // the baked data shows so the screen never breaks; live data swaps in when it arrives.
   const [livePayload, setLivePayload] = useState<DecisionSupportPayload | null>(null)
   const [reviewProduct, setReviewProduct] = useState<string | null>(null)
+  const preferences = usePreferences((s) => s.preferences)
   const didFetch = useRef(false)
   useEffect(() => {
     if (didFetch.current) return
     didFetch.current = true
-    callConnie({ message: 'Rank these strollers for me', priorities: LIVE_PRIORITIES })
+    callConnie({
+      message: 'Rank these strollers for me',
+      priorities: preferencesToPriorities(preferences) || undefined,
+    })
       .then((r) => {
         if (isDecisionSupport(r) && r.decision_support.products.length > 0) {
           setLivePayload(r.decision_support)
