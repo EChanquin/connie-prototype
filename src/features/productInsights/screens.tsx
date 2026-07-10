@@ -1,7 +1,12 @@
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
+import { callConnie } from '@/api/connieClient'
+import { isProductInsights, type ProductInsightsPayload } from '@/types/connie-contract'
+
+/** The product this "page" is about — drives the live product_insights request. */
+const LIVE_PRODUCT = 'UPPAbaby Vista V2'
 
 /* ------------------------------------------------------------------ *
  * Product Insights — faithful reproduction of Figma frames
@@ -173,6 +178,45 @@ const rows: RowData[] = [
   },
 ]
 
+/* --------- map a live product_insights payload -> the screen's RowData[] --------- */
+const CATEGORY_ICON: Record<string, { icon: string; size: number }> = {
+  safety: { icon: `${A}toprated.svg`, size: 20 },
+  maneuverability: { icon: `${A}city.svg`, size: 18 },
+  fold: { icon: `${A}fold.svg`, size: 28 },
+  ease_of_use: { icon: `${A}sketch.svg`, size: 20 },
+  service: { icon: `${A}sketch.svg`, size: 20 },
+  durability: { icon: `${A}sketch.svg`, size: 20 },
+  value: { icon: `${A}toprated.svg`, size: 20 },
+  comfort: { icon: `${A}cloud.svg`, size: 20 },
+}
+const av19 = `${A}av19.png`
+const SOURCE_AVATAR: Record<string, string> = {
+  consumer_reports: av7,
+  reddit: av5,
+  youtube: av18,
+  web: av19,
+}
+
+function insightsToRows(payload: ProductInsightsPayload): RowData[] {
+  return payload.insights.map((ins) => {
+    const meta = CATEGORY_ICON[ins.category] ?? { icon: `${A}toprated.svg`, size: 20 }
+    const evidence = ins.evidence ?? []
+    return {
+      icon: meta.icon,
+      iconSize: meta.size,
+      title: ins.label,
+      subtitle: ins.summary,
+      sources: evidence.slice(0, 2).map((e) => SOURCE_AVATAR[e.source_type] ?? av5),
+      detail: evidence.map((e) => ({
+        source: e.source_name,
+        text: e.quote,
+        chipImg: SOURCE_AVATAR[e.source_type] ?? av5,
+        chipLabel: e.source_name,
+      })),
+    }
+  })
+}
+
 function CaretButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
     <button
@@ -306,10 +350,12 @@ function RecommendedPanel({
   initialExpanded,
   initialTooltip,
   onClose,
+  rows,
 }: {
   initialExpanded: number | null
   initialTooltip: boolean
   onClose: () => void
+  rows: RowData[]
 }) {
   const [openRow, setOpenRow] = useState<number | null>(initialExpanded)
   const [tooltip, setTooltip] = useState(initialTooltip)
@@ -629,6 +675,27 @@ export function ProductInsightsScreen() {
   const showNavi = variant !== 'collapsed'
   const showRecommended = variant === 'recommended' || variant === 'expanded' || variant === 'tooltip'
 
+  // Fetch live product_insights on load. Until it returns (or if the backend is unreachable),
+  // the baked rows show so the screen never breaks; live data swaps in when it arrives.
+  const [liveRows, setLiveRows] = useState<RowData[] | null>(null)
+  const didFetch = useRef(false)
+  useEffect(() => {
+    // Fire exactly once — guard against React 18 StrictMode double-invoking the effect,
+    // which would launch two heavy product_insights calls at once and trip the Vertex quota.
+    if (didFetch.current) return
+    didFetch.current = true
+    callConnie({ message: `What are the key insights on the ${LIVE_PRODUCT}?` })
+      .then((r) => {
+        if (isProductInsights(r) && r.product_insights.insights.length > 0) {
+          setLiveRows(insightsToRows(r.product_insights))
+        }
+      })
+      .catch(() => {
+        /* keep baked rows on error */
+      })
+  }, [])
+  const panelRows = liveRows ?? rows
+
   const frame: ReactNode = (
     <FigmaFrame backdrop={bg} backdropOpacity={0.7}>
       <ProductBadges onOpen={() => setVariant('recommended')} />
@@ -639,6 +706,7 @@ export function ProductInsightsScreen() {
           initialExpanded={variant === 'expanded' ? 0 : null}
           initialTooltip={variant === 'tooltip'}
           onClose={() => setVariant('collapsed')}
+          rows={panelRows}
         />
       )}
 
