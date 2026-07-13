@@ -14,6 +14,17 @@ const DEFAULT_PREFERENCES = ['Long-term reliability', 'Ease of use']
  */
 const DEFAULT_SOURCES = ['Instagram', 'Reddit']
 
+/** Everything offered in onboarding — also used by the editable "BASED ON" popover. */
+export const ALL_PREFERENCES = [
+  'Long-term reliability',
+  'Value for money',
+  'Aesthetics',
+  'Ease of use',
+  'Sustainability',
+  'Brand ethics',
+]
+export const ALL_COMMUNITIES = ['Instagram', 'Reddit', 'YouTube', 'Tiktok', 'Pinterest', 'Online blogs']
+
 interface PreferencesState {
   preferences: string[]
   sources: string[]

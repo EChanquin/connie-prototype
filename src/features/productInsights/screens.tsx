@@ -4,7 +4,12 @@ import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
 import { callConnie } from '@/api/connieClient'
 import { isProductInsights, type ProductInsightsPayload } from '@/types/connie-contract'
-import { usePreferences, preferencesToPriorities } from '@/store/usePreferences'
+import {
+  usePreferences,
+  preferencesToPriorities,
+  ALL_PREFERENCES,
+  ALL_COMMUNITIES,
+} from '@/store/usePreferences'
 import { communityPosts, type CommunitySource } from '@/mocks/communityPosts'
 import { cleanEvidence } from '@/lib/sourceFilter'
 import { NaviRail } from '@/components/connie/NaviRail'
@@ -330,13 +335,32 @@ function InsightRow({
 }
 
 /* --------------------------------------------------------------- Popover */
-function Chip({ img, label, pencil = true }: { img?: string; label: string; pencil?: boolean }) {
+/** Chip in the BASED ON popover. Clickable when `onClick` is given; muted when not selected. */
+function Chip({
+  img,
+  label,
+  pencil = true,
+  selected = true,
+  onClick,
+}: {
+  img?: string
+  label: string
+  pencil?: boolean
+  selected?: boolean
+  onClick?: () => void
+}) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className="flex h-[34px] items-center gap-[6px] rounded-full border-[0.5px] border-border-strong bg-white py-[6px] pl-[8px] pr-[16px]">
+    <Tag
+      onClick={onClick}
+      className={`flex h-[34px] items-center gap-[6px] rounded-full border-[0.5px] bg-white py-[6px] pl-[8px] pr-[16px] ${
+        selected ? 'border-border-strong' : 'border-dashed border-border-subtle opacity-45'
+      } ${onClick ? 'cursor-pointer transition-opacity hover:opacity-100' : ''}`}
+    >
       {img && <img src={img} alt="" className="size-[20px] rounded-full border-[0.5px] border-white object-cover" />}
       <span className="whitespace-nowrap text-[14px] leading-[20px] text-[#21211f]">{label}</span>
       {pencil && <img src={`${A}pencil.svg`} alt="" className="size-[16px]" />}
-    </div>
+    </Tag>
   )
 }
 
@@ -359,6 +383,9 @@ function BasedOnPopover({
   preferences: string[]
   sources: string[]
 }) {
+  // The pencils mean these are editable — toggle a source/preference right here.
+  const toggleSource = usePreferences((s) => s.toggleSource)
+  const togglePreference = usePreferences((s) => s.togglePreference)
   return (
     <div
       className="absolute z-20 flex flex-col gap-[8px] overflow-hidden rounded-[16px] border-[0.5px] border-border-subtle bg-bg-secondary pb-[16px] pl-[32px] pr-[40px] pt-[24px] shadow-[0px_0px_15px_0px_rgba(5,5,0,0.16)]"
@@ -373,8 +400,14 @@ function BasedOnPopover({
               <span className="text-[16px] leading-[24px] text-fg-primary">Sources:</span>
             </div>
             <div className="flex flex-wrap items-center gap-[8px]">
-              {sources.map((s) => (
-                <Chip key={s} img={COMMUNITY_ICON[s]} label={s} />
+              {ALL_COMMUNITIES.map((s) => (
+                <Chip
+                  key={s}
+                  img={COMMUNITY_ICON[s]}
+                  label={s}
+                  selected={sources.includes(s)}
+                  onClick={() => toggleSource(s)}
+                />
               ))}
             </div>
           </div>
@@ -382,14 +415,19 @@ function BasedOnPopover({
             <Chip img={av7} label="Consumer Reports" pencil={false} />
           </div>
         </div>
-        <div className="flex items-center gap-[8px]">
-          <div className="flex items-center gap-[8px]">
+        <div className="flex items-start gap-[8px]">
+          <div className="flex shrink-0 items-center gap-[8px] pt-[6px]">
             <img src={`${A}sliders.svg`} alt="" className="size-[20px]" />
             <span className="text-[16px] leading-[24px] text-fg-primary">Preferences:</span>
           </div>
           <div className="flex flex-wrap items-center gap-[8px]">
-            {preferences.map((p) => (
-              <Chip key={p} label={p} />
+            {ALL_PREFERENCES.map((p) => (
+              <Chip
+                key={p}
+                label={p}
+                selected={preferences.includes(p)}
+                onClick={() => togglePreference(p)}
+              />
             ))}
           </div>
         </div>
@@ -798,15 +836,17 @@ export function ProductInsightsScreen() {
   const [livePayload, setLivePayload] = useState<ProductInsightsPayload | null>(null)
   const preferences = usePreferences((s) => s.preferences)
   const sources = usePreferences((s) => s.sources)
-  const didFetch = useRef(false)
+  // Refetch whenever the preferences change (they drive the backend's insight ordering).
+  // Keyed on the priority string, so StrictMode's double-invoke is skipped but a real
+  // preference edit in the BASED ON popover triggers a fresh, correctly-ordered fetch.
+  const priorityKey = preferencesToPriorities(preferences)
+  const lastFetched = useRef<string | null>(null)
   useEffect(() => {
-    // Fire exactly once — guard against React 18 StrictMode double-invoking the effect,
-    // which would launch two heavy product_insights calls at once and trip the Vertex quota.
-    if (didFetch.current) return
-    didFetch.current = true
+    if (lastFetched.current === priorityKey) return
+    lastFetched.current = priorityKey
     callConnie({
       message: `What are the key insights on the ${LIVE_PRODUCT}?`,
-      priorities: preferencesToPriorities(preferences) || undefined,
+      priorities: priorityKey || undefined,
     })
       .then((r) => {
         if (isProductInsights(r) && r.product_insights.insights.length > 0) {
@@ -816,7 +856,7 @@ export function ProductInsightsScreen() {
       .catch(() => {
         /* keep baked rows on error */
       })
-  }, [])
+  }, [priorityKey])
   const liveRows = livePayload ? insightsToRows(livePayload, sources) : null
   const panelRows = liveRows && liveRows.length > 0 ? liveRows : rows
 
