@@ -6,8 +6,12 @@ import { create } from 'zustand'
  * Product Insights, and shown in the "BASED ON · Preferences" popover.
  */
 const DEFAULT_PREFERENCES = ['Long-term reliability', 'Ease of use']
-/** Communities connected during onboarding (N4a). Consumer Reports is always implicit. */
-const DEFAULT_SOURCES = ['Instagram', 'Reddit']
+/**
+ * Communities connected during onboarding (N4a). Starts EMPTY — nothing is "connected" until the
+ * shopper actually picks it, so no community source ever appears that they didn't choose.
+ * Consumer Reports is always implicit and shown separately.
+ */
+const DEFAULT_SOURCES: string[] = []
 
 interface PreferencesState {
   preferences: string[]
