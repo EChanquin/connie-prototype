@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { CRLauncher } from '@/components/connie/CRLauncher'
+import { NaviRail } from '@/components/connie/NaviRail'
+import { routes } from '@/app/routes'
 import { cn } from '@/lib/cn'
 import { callConnie } from '@/api/connieClient'
 import { isInlineAnnotations, type Evidence, type InlineAnnotation } from '@/types/connie-contract'
@@ -40,28 +42,6 @@ const STATE_ORDER: { key: StateKey; short: string }[] = [
 ]
 
 /* ---------- Retailer-page chrome (persists across all states) ---------- */
-
-/** Connie Navi bar — collapsed icon rail. Absolute left 51 / top 523 (Figma 1052:5191). */
-function NaviBar() {
-  return (
-    <div
-      className="absolute flex items-center rounded-[8px] border-[0.5px] border-border-subtle bg-white p-[10px] drop-shadow-[0px_0px_7.5px_rgba(5,5,0,0.16)]"
-      style={{ left: 51, top: 523 }}
-    >
-      <div className="flex flex-col items-start gap-[16px]">
-        <div className="flex flex-col items-start gap-[16px]">
-          <img alt="" src={asset.naviChat} className="size-[40px]" />
-          <img alt="" src={asset.naviHeart} className="size-[40px]" />
-        </div>
-        <div className="h-[2px] w-[40px] bg-[#e1e1e1]" />
-        <div className="flex flex-col items-start gap-[16px]">
-          <img alt="" src={asset.naviGear} className="size-[40px]" />
-          <img alt="" src={asset.naviQuestion} className="size-[40px]" />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /** A highlighted claim swatch drawn over the retailer page. */
 function Highlight({
@@ -234,17 +214,18 @@ function LiveSources({ evidence }: { evidence: Evidence[] }) {
 /* ---------- Exported screen ---------- */
 export function AnnotationsScreen() {
   const [params, setParams] = useSearchParams()
-  const initial = (params.get('state') as StateKey) || 'base'
-  const [state, setStateRaw] = useState<StateKey>(
-    STATE_ORDER.some((s) => s.key === initial) ? initial : 'base',
-  )
 
-  const setState = (s: StateKey) => {
-    setStateRaw(s)
+  // Intro tooltip — shown once when arriving from the Product Insights page, before the callout.
+  const [intro, setIntro] = useState(params.get('intro') === '1')
+  const dismissIntro = () => {
+    setIntro(false)
     const next = new URLSearchParams(params)
-    next.set('state', s)
+    next.delete('intro')
     setParams(next, { replace: true })
   }
+
+  // On the base screen, hovering the highlighted claim reveals the misleading-claim callout.
+  const [showMisleading, setShowMisleading] = useState(false)
 
   // Fetch live inline annotations once; index them by verdict so each callout can use its own.
   const [annById, setAnnById] = useState<Record<string, InlineAnnotation>>({})
@@ -267,111 +248,92 @@ export function AnnotationsScreen() {
   // Only use a live annotation if it still has valid evidence after filtering youtube/competitors;
   // otherwise fall back to the designed (evidenced) callout — never show an evidence-less claim.
   const valid = (a?: InlineAnnotation) => (a && cleanEvidence(a.evidence).length > 0 ? a : undefined)
-  const annBoth = valid(annById['verified_by_both'])
-  const annComm = valid(annById['verified_by_community_only'])
-  const annMis = valid(annById['misleading'])
-  const annUnv = annById['unverifiable'] // unverifiable is evidence-free by design
   const connected = usePreferences((s) => s.sources) // communities picked in onboarding
+  const annMis = valid(annById['misleading'])
+
+  /* ---- Intro coach mark (arrives from Product Insights via ?intro=1) ---- */
+  if (intro) {
+    return (
+      <FigmaFrame backdrop={asset.backdrop} backdropOpacity={0.4}>
+        {/* Highlighted claim the user "pointed to" */}
+        <div
+          className="absolute rounded-[4px]"
+          style={{ left: 597, top: 569, width: 248, height: 21, opacity: 0.3, background: '#ae0d00' }}
+        />
+        <div
+          className="absolute rounded-[4px]"
+          style={{ left: 579, top: 565, width: 276, height: 30, border: '2.5px solid #050500' }}
+        />
+
+        {/* Dark tooltip bubble + arrow pointing right toward the highlight */}
+        <div className="absolute flex items-center" style={{ left: 154, top: 480 }}>
+          <div
+            className="flex w-[397px] flex-col items-start gap-[18px] overflow-clip rounded-[16px] bg-fg-primary p-[28px]"
+            style={{ boxShadow: '0px 10px 28px 0px rgba(0,0,0,0.22)' }}
+          >
+            <div className="flex items-start rounded-[999px] bg-bg-primary px-[12px] py-[5px]">
+              <p className="whitespace-nowrap text-[12px] font-semibold leading-[16px] text-fg-primary">
+                INLINE ANNOTATION
+              </p>
+            </div>
+            <p className="text-[16px] font-normal leading-[24px] text-fg-inverse">
+              Highlight anything you're unsure about. Connie only checks what you point to and searches
+              CR's tests and community live, so the colored flags appear right after you highlight.
+            </p>
+          </div>
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderTop: '16px solid transparent',
+              borderBottom: '16px solid transparent',
+              borderLeft: '14px solid #050500',
+            }}
+          />
+        </div>
+
+        {/* Got it pill */}
+        <div
+          className="absolute flex w-[143px] items-center overflow-clip rounded-[999px] bg-white px-[22px] py-[12px]"
+          style={{ left: 647, top: 794, boxShadow: '0px 8px 24px 0px rgba(0,0,0,0.14)' }}
+        >
+          <button
+            onClick={dismissIntro}
+            className="flex h-[48px] flex-1 items-center justify-center rounded-[48px] bg-brand text-[16px] font-semibold text-fg-inverse"
+          >
+            Got it ✓
+          </button>
+        </div>
+
+        <NaviRail />
+      </FigmaFrame>
+    )
+  }
 
   return (
-    <FigmaFrame backdrop={asset.backdrop} backdropOpacity={state === 'base' ? 1 : 0.7}>
-      {/* Highlighted claim(s) on the retailer page */}
-      {(state === 'base' || state === 'misleading') && (
-        <Highlight left={597} top={569} width={248} color="#ae0d00" opacity={0.3} />
-      )}
-      {state === 'verified-both' && (
-        <Highlight left={601} top={570} width={244} color="#00803e" />
-      )}
-      {state === 'verified-community' && (
-        <>
-          <Highlight left={598} top={401} width={368} color="#003866" />
-          <Highlight left={601} top={570} width={244} color="rgba(0,128,62,0.2)" />
-        </>
-      )}
-      {state === 'unverifiable' && (
-        <Highlight left={598} top={570} width={249} color="#ffa500" />
-      )}
-
-      {/* Verified — CR + community (1052:2759) */}
-      {state === 'verified-both' && (
-        <Callout
-          style={{ left: 802, top: 598 }}
-          icon={asset.check}
-          title={annBoth?.verdict_label ?? 'Verified claim'}
-          subtitle={annBoth?.explanation ?? 'Matches what our testers and real users are saying. '}
-          onClose={() => setState('base')}
-        >
-          {annBoth ? (
-            <LiveSources evidence={annBoth.evidence} />
-          ) : (
-            <SourceRow>
-              <SourceCard
-                avatar={asset.avatarCr}
-                name="Consumer Reports "
-                quote={crPaddingQuote}
-                chip="Baby Trend Stroller Review"
-              />
-              {connected.includes('Reddit') && (
-                <SourceCard
-                  avatar={asset.avatarReddit}
-                  name="Reddit"
-                  quote={redditComfyQuote}
-                  chip="Best Strollers: Thread"
-                />
-              )}
-            </SourceRow>
-          )}
-        </Callout>
-      )}
-
-      {/* Verified — community, not CR (1052:2806) */}
-      {state === 'verified-community' && (
-        <Callout
-          style={{ left: 802, top: 598 }}
-          icon={asset.check}
-          title={annComm?.verdict_label ?? 'Verified claim'}
-          subtitle={
-            annComm?.explanation ??
-            "Our testers haven't reviewed this product, but it matches what real users are saying."
-          }
-          onClose={() => setState('base')}
-        >
-          {annComm ? (
-            <LiveSources evidence={annComm.evidence} />
-          ) : (
-            <SourceRow>
-              {connected.includes('Reddit') && (
-                <SourceCard
-                  avatar={asset.avatarReddit}
-                  name="Reddit"
-                  quote={redditComfyQuoteAlt}
-                  chip="Best Strollers: Thread"
-                  fixed={false}
-                />
-              )}
-              {connected.includes('Instagram') && (
-                <SourceCard
-                  avatar={asset.avatarInstagram}
-                  name="Instagram"
-                  quote={instagramQuote}
-                  chip="@dad_at_home’s post"
-                  ring={false}
-                  fixed={false}
-                />
-              )}
-            </SourceRow>
-          )}
-        </Callout>
-      )}
+    <FigmaFrame backdrop={asset.backdrop} backdropOpacity={showMisleading ? 0.7 : 1}>
+      {/* Highlighted claim on the page — hovering it reveals the misleading-claim callout;
+          moving off it returns to the base screen. No black border in either state. */}
+      <div
+        className="absolute cursor-pointer"
+        style={{ left: 579, top: 563, width: 276, height: 34 }}
+        onMouseEnter={() => setShowMisleading(true)}
+        onMouseLeave={() => setShowMisleading(false)}
+      >
+        <div
+          className="absolute rounded-[4px]"
+          style={{ left: 18, top: 6, width: 248, height: 21, background: '#ae0d00', opacity: 0.3 }}
+        />
+      </div>
 
       {/* Misleading — CR + community (1052:2717) */}
-      {state === 'misleading' && (
+      {showMisleading && (
         <Callout
           style={{ left: 802, top: 598 }}
           icon={asset.xcircle}
           title={annMis?.verdict_label ?? 'Misleading claim'}
           subtitle={annMis?.explanation ?? "Doesn't match what our testers and real users are saying."}
-          onClose={() => setState('base')}
+          onClose={() => setShowMisleading(false)}
         >
           {annMis ? (
             <LiveSources evidence={annMis.evidence} />
@@ -383,57 +345,20 @@ export function AnnotationsScreen() {
                 quote={crSeatQuote}
                 chip="Baby Trend Stroller Review"
               />
-              <SourceCard
-                avatar={asset.avatarReddit}
-                name="Reddit"
-                quote={redditFussQuote}
-                chip="Best Strollers: Thread"
-              />
+              {connected.includes('Reddit') && (
+                <SourceCard
+                  avatar={asset.avatarReddit}
+                  name="Reddit"
+                  quote={redditFussQuote}
+                  chip="Best Strollers: Thread"
+                />
+              )}
             </SourceRow>
           )}
         </Callout>
       )}
 
-      {/* Unable to verify (1052:2855) — offset callout at left 741 / top 609 */}
-      {state === 'unverifiable' && (
-        <Callout
-          style={{ left: 741, top: 609 }}
-          icon={asset.question}
-          title={annUnv?.verdict_label ?? 'Unable to verify claim'}
-          subtitle={
-            annUnv?.explanation ??
-            'Connie didn’t have enough info to confirm or dispute this claim. Add more trusted sources to help verify it.'
-          }
-          onClose={() => setState('base')}
-        >
-          <div className="flex w-full flex-col items-center gap-[12px] py-[8px]">
-            <button className="flex flex-col items-start rounded-[48px] bg-[#404040] px-[24px] py-[8px]">
-              <span className="whitespace-nowrap text-[14px] font-semibold leading-[24px] text-white">
-                Add more sources
-              </span>
-            </button>
-          </div>
-        </Callout>
-      )}
-
-      <NaviBar />
-      <CRLauncher style={{ left: 52, top: 792 }} />
-
-      {/* Dev control — switch between the five states (not part of the Figma frame) */}
-      <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 gap-[4px] rounded-pill border border-border-subtle bg-white/95 p-[4px] shadow-panel backdrop-blur">
-        {STATE_ORDER.map((s) => (
-          <button
-            key={s.key}
-            onClick={() => setState(s.key)}
-            className={cn(
-              'rounded-pill px-[12px] py-[4px] text-[12px] font-medium transition-colors',
-              state === s.key ? 'bg-brand text-white' : 'text-fg-secondary hover:text-fg-primary',
-            )}
-          >
-            {s.short}
-          </button>
-        ))}
-      </div>
+      <NaviRail />
     </FigmaFrame>
   )
 }

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
+import { RetailBackdrop } from '@/components/connie/RetailBackdrop'
 import { routes } from '@/app/routes'
 import { callConnie } from '@/api/connieClient'
 import { isPriorityInference } from '@/types/connie-contract'
+import { NaviRail } from '@/components/connie/NaviRail'
 
 const DEFAULT_PRIORITIES = ['Safety', 'Durability', 'Easy Fold', 'Lightweight']
 
@@ -206,30 +208,6 @@ function ChoiceCard({
   )
 }
 
-/** Floating Navi bar launcher (expanded — matches Figma frame). */
-function NaviBar() {
-  return (
-    <div
-      className="absolute flex items-center rounded-[8px] border-[0.5px] border-border-subtle bg-white p-[10px]"
-      style={{ left: 62, top: 300, filter: 'drop-shadow(0px 0px 7.5px rgba(5,5,0,0.16))' }}
-    >
-      <div className="flex flex-col items-start gap-[16px]">
-        <div className="flex flex-col items-start gap-[16px]">
-          <div className="flex size-[40px] items-center justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
-            <img src={asset.navChat} alt="" className="size-[28px]" />
-          </div>
-          <img src={asset.navHeart} alt="" className="size-[40px]" />
-        </div>
-        <img src={asset.navLine} alt="" className="h-0 w-full" />
-        <div className="flex flex-col items-start gap-[16px]">
-          <img src={asset.navGear} alt="" className="size-[40px]" />
-          <img src={asset.navQuestion} alt="" className="size-[40px]" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* ---------- Bento states ---------- */
 
 /** Icon + sizing per priority label (live suggested_priorities map to these). */
@@ -328,19 +306,41 @@ export function PriorityInferenceScreen() {
   }, [step])
 
   const placeholder =
-    step === 2 || step === 3
-      ? 'None of these? Tell me about your living situation.'
-      : step === 5 || step === 6
+    step >= 7
+      ? 'Ask Connie...'
+      : step >= 4
         ? 'None of these? Tell me about your commute.'
-        : step === 8
-          ? 'Ask Connie...'
+        : step >= 2
+          ? 'None of these? Tell me about your living situation.'
           : 'Ask Connie anything...'
 
-  const livingSelected = step >= 3
-  const commuteSelected = step >= 6
+  // Which answer the user picked for each question (drives the chip highlight).
+  const [chosenLiving, setChosenLiving] = useState<string | null>(
+    initial >= 4 ? 'Apartment without elevator' : null,
+  )
+  const [chosenCommute, setChosenCommute] = useState<string | null>(
+    initial >= 7 ? 'Mostly public transit' : null,
+  )
+  // After a selection, highlight the chip immediately, then reveal the next question / priority
+  // change after ~800ms — matching the post-purchase "after delay" interaction.
+  const timerRef = useRef<number | null>(null)
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current) }, [])
+  const answerAfter = (n: number) => {
+    if (timerRef.current) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => go(n), 800)
+  }
+  const answerLiving = (label: string) => {
+    setChosenLiving(label)
+    answerAfter(4)
+  }
+  const answerCommute = (label: string) => {
+    setChosenCommute(label)
+    answerAfter(7)
+  }
 
   return (
-    <FigmaFrame backdrop={asset.amazonBg} backdropOpacity={0.4}>
+    <FigmaFrame>
+      <RetailBackdrop />
       {/* Aside — Floating Bubble Panel (right, 16px inset, full height) */}
       <div
         className="absolute flex flex-col items-start overflow-clip rounded-[16px] border border-border-subtle bg-bg-secondary p-px shadow-panel"
@@ -402,15 +402,21 @@ export function PriorityInferenceScreen() {
                   <Chip
                     label="Apartment with elevator"
                     icon={asset.chipElevator}
-                    onClick={() => go(3)}
+                    selected={chosenLiving === 'Apartment with elevator'}
+                    onClick={() => answerLiving('Apartment with elevator')}
                   />
                   <Chip
                     label="Apartment without elevator"
                     icon={asset.chipNoElevator}
-                    selected={livingSelected}
-                    onClick={() => go(4)}
+                    selected={chosenLiving === 'Apartment without elevator'}
+                    onClick={() => answerLiving('Apartment without elevator')}
                   />
-                  <Chip label="House" icon={asset.chipHouse} onClick={() => go(3)} />
+                  <Chip
+                    label="House"
+                    icon={asset.chipHouse}
+                    selected={chosenLiving === 'House'}
+                    onClick={() => answerLiving('House')}
+                  />
                 </div>
               </Group>
 
@@ -424,19 +430,27 @@ export function PriorityInferenceScreen() {
                 </Group>
               )}
 
-              {step >= 5 && (
+              {step >= 4 && (
                 <Group>
                   <Bubble>
                     Which best describes how you'll usually travel with your stroller?
                   </Bubble>
                   <div className="flex w-full flex-col items-start gap-[8px]">
-                    <Chip label="Mostly by car" onClick={() => go(6)} />
+                    <Chip
+                      label="Mostly by car"
+                      selected={chosenCommute === 'Mostly by car'}
+                      onClick={() => answerCommute('Mostly by car')}
+                    />
                     <Chip
                       label="Mostly public transit"
-                      selected={commuteSelected}
-                      onClick={() => go(7)}
+                      selected={chosenCommute === 'Mostly public transit'}
+                      onClick={() => answerCommute('Mostly public transit')}
                     />
-                    <Chip label="Mostly walking" onClick={() => go(6)} />
+                    <Chip
+                      label="Mostly walking"
+                      selected={chosenCommute === 'Mostly walking'}
+                      onClick={() => answerCommute('Mostly walking')}
+                    />
                   </div>
                 </Group>
               )}
@@ -451,7 +465,7 @@ export function PriorityInferenceScreen() {
                 </Group>
               )}
 
-              {step >= 8 && (
+              {step >= 7 && (
                 <Group>
                   <Bubble>
                     <>
@@ -478,7 +492,7 @@ export function PriorityInferenceScreen() {
         </div>
 
         {/* Suggested-action pills (final step only) */}
-        {step >= 8 && (
+        {step >= 7 && (
           <div className="flex h-[57px] w-full shrink-0 flex-wrap content-start items-start gap-[9px] overflow-clip pl-[16px]">
             <div className="flex items-center justify-center overflow-clip rounded-[999px] border-[1.5px] border-fg-secondary bg-white px-[18px] py-[11px]">
               <span className="whitespace-nowrap text-[16px] leading-[24px] text-fg-primary">
@@ -507,7 +521,7 @@ export function PriorityInferenceScreen() {
       </div>
 
       {/* Floating Navi bar launcher */}
-      <NaviBar />
+      <NaviRail active="chat" />
 
       {/* Step controls (prototype) */}
       <div className="absolute bottom-[16px] left-[16px] z-10 flex items-center gap-[8px]">
