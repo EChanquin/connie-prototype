@@ -124,6 +124,8 @@ function Callout({
   subtitle,
   children,
   onClose,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   style: CSSProperties
   icon: string
@@ -131,9 +133,13 @@ function Callout({
   subtitle: string
   children?: ReactNode
   onClose: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }) {
   return (
     <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="absolute flex flex-col items-start gap-[12px] overflow-clip rounded-md border-[0.5px] border-[#c5c5c5] bg-bg-secondary p-[24px] shadow-panel"
       style={{ width: 520, ...style }}
     >
@@ -225,7 +231,21 @@ export function AnnotationsScreen() {
   }
 
   // On the base screen, hovering the highlighted claim reveals the misleading-claim callout.
+  // The callout has clickable source links, so don't close it the instant the cursor leaves the
+  // highlight — keep it open with a grace period, and while the cursor is over the callout itself.
   const [showMisleading, setShowMisleading] = useState(false)
+  const closeTimer = useRef<number | null>(null)
+  const openCallout = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+    setShowMisleading(true)
+  }
+  const closeCalloutSoon = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    closeTimer.current = window.setTimeout(() => setShowMisleading(false), 300)
+  }
 
   // Fetch live inline annotations once; index them by verdict so each callout can use its own.
   const [annById, setAnnById] = useState<Record<string, InlineAnnotation>>({})
@@ -317,8 +337,9 @@ export function AnnotationsScreen() {
       <div
         className="absolute cursor-pointer"
         style={{ left: 579, top: 563, width: 276, height: 34 }}
-        onMouseEnter={() => setShowMisleading(true)}
-        onMouseLeave={() => setShowMisleading(false)}
+        onMouseEnter={openCallout}
+        onMouseLeave={closeCalloutSoon}
+        onClick={() => setShowMisleading((s) => !s)}
       >
         <div
           className="absolute rounded-[4px]"
@@ -334,6 +355,8 @@ export function AnnotationsScreen() {
           title={annMis?.verdict_label ?? 'Misleading claim'}
           subtitle={annMis?.explanation ?? "Doesn't match what our testers and real users are saying."}
           onClose={() => setShowMisleading(false)}
+          onMouseEnter={openCallout}
+          onMouseLeave={closeCalloutSoon}
         >
           {annMis ? (
             <LiveSources evidence={annMis.evidence} />
