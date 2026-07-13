@@ -18,6 +18,8 @@ import { IconHeart } from '@/components/icons'
 
 /** The product this "page" is about — drives the live product_insights request. */
 const LIVE_PRODUCT = 'UPPAbaby Vista V2'
+/** The one genuinely not-recommended stroller in the CR data — drives the NOT RECOMMENDED card. */
+const NOT_REC_PRODUCT = 'Lite 3'
 
 /* ------------------------------------------------------------------ *
  * Product Insights — faithful reproduction of Figma frames
@@ -485,6 +487,7 @@ function InsightPanel({
   rows,
   preferences,
   sources,
+  initialPos,
 }: {
   verdict: Verdict
   initialExpanded: number | null
@@ -493,6 +496,8 @@ function InsightPanel({
   rows: RowData[]
   preferences: string[]
   sources: string[]
+  /** Where the panel first appears — lets NOT RECOMMENDED anchor to its own product card. */
+  initialPos?: { left: number; top: number }
 }) {
   const cfg = VERDICT_CFG[verdict]
   const [openRow, setOpenRow] = useState<number | null>(initialExpanded)
@@ -515,7 +520,7 @@ function InsightPanel({
   }
 
   // Draggable panel position (Figma default 736 / 287).
-  const [pos, setPos] = useState({ left: 736, top: 287 })
+  const [pos, setPos] = useState(initialPos ?? { left: 736, top: 287 })
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const onDragStart = (e: React.PointerEvent) => {
     dragRef.current = { x: e.clientX, y: e.clientY, left: pos.left, top: pos.top }
@@ -888,6 +893,30 @@ export function ProductInsightsScreen() {
   const liveRows = livePayload ? insightsToRows(livePayload, sources) : null
   const panelRows = liveRows && liveRows.length > 0 ? liveRows : rows
 
+  // NOT RECOMMENDED card — live insights for the one genuinely not-recommended stroller in the CR
+  // data. Fetched lazily (only when that panel is opened) so we don't spend quota on every load.
+  const [notRecPayload, setNotRecPayload] = useState<ProductInsightsPayload | null>(null)
+  const notRecFetched = useRef<string | null>(null)
+  useEffect(() => {
+    if (variant !== 'notrec') return
+    if (notRecFetched.current === priorityKey) return
+    notRecFetched.current = priorityKey
+    callConnie({
+      message: `What are the key insights on the ${NOT_REC_PRODUCT}?`,
+      priorities: priorityKey || undefined,
+    })
+      .then((r) => {
+        if (isProductInsights(r) && r.product_insights.insights.length > 0) {
+          setNotRecPayload(r.product_insights)
+        }
+      })
+      .catch(() => {
+        /* keep baked not-rec rows on error */
+      })
+  }, [variant, priorityKey])
+  const notRecLive = notRecPayload ? insightsToRows(notRecPayload, sources) : null
+  const notRecPanelRows = notRecLive && notRecLive.length > 0 ? notRecLive : notRecRows
+
   const frame: ReactNode = (
     <FigmaFrame>
       {/* Click anywhere on the retail page (behind the retail group / panels / launcher) to open
@@ -920,13 +949,16 @@ export function ProductInsightsScreen() {
 
       {variant === 'notrec' && (
         <InsightPanel
+          key={`notrec-${priorityKey}`}
           verdict="notrec"
           initialExpanded={null}
           initialTooltip={false}
           onClose={() => setVariant('collapsed')}
-          rows={notRecRows}
+          rows={notRecPanelRows}
           preferences={preferences}
           sources={sources}
+          // Anchor to the left grey product card (its badge sits at left 356 / top 100).
+          initialPos={{ left: 176, top: 170 }}
         />
       )}
 
