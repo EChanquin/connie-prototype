@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { RetailBackdrop } from '@/components/connie/RetailBackdrop'
 import { routes } from '@/app/routes'
-import { callConnieCached, peekConnieCache } from '@/api/connieClient'
+import { callConnie } from '@/api/connieClient'
 import { isPriorityInference } from '@/types/connie-contract'
 import { NaviRail } from '@/components/connie/NaviRail'
 
