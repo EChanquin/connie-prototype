@@ -104,13 +104,143 @@ function OutlineButton({ children, onClick }: { children: ReactNode; onClick?: (
   )
 }
 
+/* ---------- Empty Google search page (mock) ---------- */
+
+/** Colorful "Google" wordmark. */
+function GoogleWordmark() {
+  const letters: [string, string][] = [
+    ['G', '#4285F4'],
+    ['o', '#EA4335'],
+    ['o', '#FBBC05'],
+    ['g', '#4285F4'],
+    ['l', '#34A853'],
+    ['e', '#EA4335'],
+  ]
+  return (
+    <p className="font-sans text-[92px] font-medium leading-none" style={{ letterSpacing: '-3px' }}>
+      {letters.map(([ch, c], i) => (
+        <span key={i} style={{ color: c }}>
+          {ch}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/**
+ * Empty Google homepage. `dim` fades it behind the onboarding panels; when `onQuery`/`onSearch`
+ * are passed the search box is live (used by the SearchScreen).
+ */
+function GoogleHome({
+  dim = false,
+  query,
+  onQuery,
+  onSearch,
+}: {
+  dim?: boolean
+  query?: string
+  onQuery?: (v: string) => void
+  onSearch?: () => void
+}) {
+  return (
+    <div className="absolute inset-0 bg-white" style={{ opacity: dim ? 0.5 : 1 }}>
+      {/* top-right chrome */}
+      <div className="absolute right-[26px] top-[24px] flex items-center gap-[22px] text-[14px] text-[#3c4043]">
+        <span>Gmail</span>
+        <span>Images</span>
+        <span className="text-[20px] text-[#5f6368]">▦</span>
+        <span className="flex size-[36px] items-center justify-center rounded-full bg-[#a0c3ff] text-[15px] font-medium text-[#1a3d7c]">
+          A
+        </span>
+      </div>
+      {/* centered content */}
+      <div className="flex h-full flex-col items-center pt-[210px]">
+        <GoogleWordmark />
+        <div className="mt-[30px] flex h-[48px] w-[580px] items-center gap-[14px] rounded-full border border-[#dfe1e5] px-[20px] shadow-[0_1px_6px_rgba(32,33,36,0.12)]">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
+          </svg>
+          <input
+            value={query ?? ''}
+            readOnly={!onQuery}
+            autoFocus={!!onQuery}
+            onChange={(e) => onQuery?.(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (query ?? '').trim()) onSearch?.()
+            }}
+            placeholder=""
+            className="h-full flex-1 bg-transparent text-[16px] text-[#202124] outline-none"
+          />
+        </div>
+        <div className="mt-[28px] flex gap-[12px]">
+          <button
+            onClick={() => (query ?? '').trim() && onSearch?.()}
+            className="rounded-[4px] bg-[#f8f9fa] px-[18px] py-[9px] text-[14px] text-[#3c4043]"
+          >
+            Google Search
+          </button>
+          <button className="rounded-[4px] bg-[#f8f9fa] px-[18px] py-[9px] text-[14px] text-[#3c4043]">
+            I&rsquo;m Feeling Lucky
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* Post-install — empty Google page with the Connie "C". Click it to start onboarding. */
+export function SearchScreen() {
+  const navigate = useNavigate()
+  const [query, setQuery] = useState('')
+  return (
+    <FigmaFrame>
+      <GoogleHome query={query} onQuery={setQuery} onSearch={() => navigate(routes.results)} />
+
+      {/* The just-installed Connie launcher — clicking it opens onboarding. */}
+      <div className="absolute size-[60px]" style={{ left: 52, bottom: 48 }}>
+        <span className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-brand opacity-30" />
+        <button
+          aria-label="Open Connie"
+          onClick={() => navigate(routes.welcome)}
+          className="relative block size-[60px]"
+        >
+          <img src="/figma/C.png" alt="Connie" className="size-full object-contain" />
+        </button>
+        <span className="absolute left-[72px] top-[14px] whitespace-nowrap rounded-[8px] bg-fg-primary px-[12px] py-[8px] text-[13px] font-medium text-white shadow-panel">
+          👋 Tap Connie to get set up
+        </span>
+      </div>
+    </FigmaFrame>
+  )
+}
+
+/* Search results — the stroller results page. Click "Amazon" to open the product. */
+export function ResultsScreen() {
+  const navigate = useNavigate()
+  return (
+    <FigmaFrame backdrop={onboardingGoogleBg} backdropOpacity={1}>
+      {/* Highlighted "Amazon" retailer link on the results page */}
+      <button
+        onClick={() => navigate('/browse/tour')}
+        className="absolute flex h-[23px] w-[80px] items-center justify-center rounded-[3px] bg-bg-tertiary p-[3px] ring-2 ring-brand"
+        style={{ left: 360, top: 474 }}
+      >
+        <span className="whitespace-nowrap text-title4 font-semibold text-fg-secondary">Amazon</span>
+      </button>
+
+      <NaviRail />
+    </FigmaFrame>
+  )
+}
+
 /* N0 — Chrome Web Store install (node 1052:7120) */
 export function InstallScreen() {
   const navigate = useNavigate()
   const setInstalled = useJourneyStore((s) => s.setInstalled)
   const install = () => {
     setInstalled(true)
-    navigate(routes.welcome)
+    navigate(routes.search)
   }
   const metaText = "font-medium text-[16.337px]"
   return (
@@ -261,7 +391,8 @@ export function InstallScreen() {
 export function WelcomeScreen() {
   const navigate = useNavigate()
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       {/* Connie panel — 1052:2135 */}
       <div
         className="absolute flex flex-col items-start gap-[20px] overflow-clip rounded-md border border-border-subtle bg-bg-secondary p-[36px] shadow-panel"
@@ -300,7 +431,8 @@ export function MemberCheckScreen() {
   const navigate = useNavigate()
   const setMember = useJourneyStore((s) => s.setMember)
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={20}>
         <CloseX onClick={() => navigate('/')} />
         <div className="flex w-full flex-col gap-[8px]">
@@ -385,7 +517,8 @@ export function LoginScreen() {
   const navigate = useNavigate()
   const setMember = useJourneyStore((s) => s.setMember)
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={18}>
         <CloseX onClick={() => navigate('/')} />
         <div className="flex w-full flex-col gap-[8px]">
@@ -435,7 +568,8 @@ function PromiseCard({ icon, title, body }: { icon: string; title: string; body:
 export function PromiseScreen() {
   const navigate = useNavigate()
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={20}>
         <CloseX onClick={() => navigate('/')} />
         <div className="flex w-full flex-col gap-[8px]">
@@ -482,7 +616,8 @@ export function SurveyCommunitiesScreen() {
   const toggle = usePreferences((s) => s.toggleSource)
   const canContinue = selected.length > 0
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={24}>
         <CloseX onClick={() => navigate('/')} />
         <div className="flex w-full flex-col gap-[8px]">
@@ -536,7 +671,8 @@ export function SurveyPrioritiesScreen() {
   const selected = usePreferences((s) => s.preferences)
   const toggle = usePreferences((s) => s.togglePreference)
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={24}>
         <CloseX onClick={() => navigate('/')} />
         <div className="flex w-full flex-col gap-[8px]">
@@ -610,7 +746,8 @@ export function PermissionsScreen() {
   const [allTabs, setAllTabs] = useState(true)
   const [manual, setManual] = useState(false)
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <div
         className="absolute flex flex-col gap-[26px] overflow-y-auto rounded-md border border-border-subtle bg-bg-secondary p-[36px] shadow-panel"
         style={{ left: 864, top: 72, width: 520, maxHeight: 804 }}
@@ -703,12 +840,14 @@ export function PermissionsScreen() {
 export function DoneScreen() {
   const navigate = useNavigate()
   const complete = useJourneyStore((s) => s.completeOnboarding)
+  // Close onboarding → back to the (empty) Google page, where the shopper runs their first search.
   const finish = () => {
     complete()
-    navigate('/browse/tour')
+    navigate(routes.search)
   }
   return (
-    <FigmaFrame backdrop={onboardingGoogleBg}>
+    <FigmaFrame>
+      <GoogleHome dim />
       <Panel gap={20} center>
         <CloseX onClick={finish} />
         <div className="flex size-[84px] items-center justify-center rounded-[20px] bg-brand text-fg-inverse">
@@ -718,18 +857,10 @@ export function DoneScreen() {
           You're all set! Connie's ready for you.
         </p>
         <p className="w-full text-center text-body text-fg-secondary">
-          Open any product on Amazon, Target, or a review site and CR's take shows up right on the page.
+          Search for anything on Amazon, Target, or a review site and CR's take shows up right on the page.
         </p>
+        <PrimaryButton onClick={finish}>Start shopping</PrimaryButton>
       </Panel>
-
-      {/* Highlighted "Amazon" retailer on the page behind */}
-      <button
-        onClick={finish}
-        className="absolute flex h-[23px] w-[80px] items-center justify-center bg-bg-tertiary p-[3px]"
-        style={{ left: 360, top: 474 }}
-      >
-        <span className="whitespace-nowrap text-title4 font-semibold text-fg-secondary">Amazon</span>
-      </button>
 
       <NaviRail />
     </FigmaFrame>

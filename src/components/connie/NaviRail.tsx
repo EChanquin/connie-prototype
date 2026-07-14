@@ -41,7 +41,7 @@ export function NaviRail({
   const btn = (isActive: boolean) =>
     cn(
       'relative flex size-[40px] items-center justify-center rounded-[8px] transition-colors',
-      isActive ? 'bg-bg-tertiary text-fg-primary' : 'text-fg-secondary hover:bg-bg-tertiary',
+      isActive ? 'bg-[#C4E860] text-fg-inverse' : 'text-fg-secondary hover:bg-bg-tertiary',
     )
 
   return (

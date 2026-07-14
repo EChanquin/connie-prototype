@@ -1,6 +1,8 @@
 /** Typed route constants + prototype flow order for the clickthrough. */
 export const routes = {
   install: '/onboarding/install',
+  search: '/onboarding/search',
+  results: '/onboarding/results',
   welcome: '/onboarding/welcome',
   memberCheck: '/onboarding/member-check',
   login: '/onboarding/login',
