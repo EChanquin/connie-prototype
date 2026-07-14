@@ -71,6 +71,68 @@ export async function callConnie(opts: CallConnieOptions): Promise<ConnieRespons
   return parseConnieResponse(raw);
 }
 
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Session cache
+ * ────────────────────────────────────────────────────────────────────────── *
+ * Screens fetch on mount, but React unmounts them on navigation — so leaving Product Insights and
+ * coming back used to re-run the whole analysis. That is slow, and it re-spends Vertex quota on an
+ * answer we already had.
+ *
+ * This cache lives at module scope, so it outlives any component and survives route changes. It is
+ * keyed on the exact request (priorities + message), which means changing preferences correctly
+ * produces a new key and a genuine refetch. It is in-memory only: a hard reload clears it, which is
+ * the behaviour you want for a demo.
+ *
+ * In-flight requests are cached too, so two components mounting at once share one network call
+ * rather than racing (this also absorbs React StrictMode's double-invoke).
+ *
+ * Failures are NOT cached — the entry is dropped so a retry can succeed after, say, a 429.
+ *
+ * Chat deliberately does not use this: the same question asked twice should get a fresh answer.
+ */
+
+const inFlight = new Map<string, Promise<ConnieResponse>>();
+const resolved = new Map<string, ConnieResponse>();
+
+const cacheKey = (o: CallConnieOptions) => `${o.priorities?.trim() ?? ''}::${o.message}`;
+
+/** Already-resolved response for this exact request, or null. Synchronous — safe in render/init. */
+export function peekConnieCache(opts: CallConnieOptions): ConnieResponse | null {
+  return resolved.get(cacheKey(opts)) ?? null;
+}
+
+/** Like `callConnie`, but returns the cached response (or the in-flight promise) when we've
+ *  already asked this exact question with these exact priorities. */
+export function callConnieCached(opts: CallConnieOptions): Promise<ConnieResponse> {
+  const key = cacheKey(opts);
+
+  const done = resolved.get(key);
+  if (done) return Promise.resolve(done);
+
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const p = callConnie(opts)
+    .then((r) => {
+      resolved.set(key, r);
+      inFlight.delete(key);
+      return r;
+    })
+    .catch((err) => {
+      inFlight.delete(key); // don't cache failures — a 429 should be retryable
+      throw err;
+    });
+
+  inFlight.set(key, p);
+  return p;
+}
+
+/** Drop everything — e.g. if you add a "re-analyze" affordance. */
+export function clearConnieCache(): void {
+  inFlight.clear();
+  resolved.clear();
+}
+
 /**
  * Dig the ChatOutput message text out of Langflow's nested run response.
  * The exact path shifts slightly between Langflow versions, so try the known shapes.

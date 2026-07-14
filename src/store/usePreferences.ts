@@ -6,21 +6,50 @@ import { create } from 'zustand'
  * Product Insights, and shown in the "BASED ON · Preferences" popover.
  */
 const DEFAULT_PREFERENCES = ['Long-term reliability', 'Ease of use']
+/**
+ * Communities connected during onboarding (N4a) — pre-selected to match the design, the same way
+ * the two default preferences are. Deselecting or adding any community in onboarding is respected
+ * everywhere (Sources popover, insight cards, annotations).
+ * Consumer Reports is always implicit and shown separately.
+ */
+const DEFAULT_SOURCES = ['Instagram', 'Reddit']
+
+/** Everything offered in onboarding — also used by the editable "BASED ON" popover. */
+export const ALL_PREFERENCES = [
+  'Long-term reliability',
+  'Value for money',
+  'Aesthetics',
+  'Ease of use',
+  'Sustainability',
+  'Brand ethics',
+]
+export const ALL_COMMUNITIES = ['Instagram', 'Reddit', 'YouTube', 'Tiktok', 'Pinterest', 'Online blogs']
 
 interface PreferencesState {
   preferences: string[]
+  sources: string[]
   setPreferences: (p: string[]) => void
   togglePreference: (label: string) => void
+  setSources: (s: string[]) => void
+  toggleSource: (label: string) => void
 }
 
 export const usePreferences = create<PreferencesState>((set) => ({
   preferences: DEFAULT_PREFERENCES,
+  sources: DEFAULT_SOURCES,
   setPreferences: (p) => set({ preferences: p }),
   togglePreference: (label) =>
     set((s) => ({
       preferences: s.preferences.includes(label)
         ? s.preferences.filter((x) => x !== label)
         : [...s.preferences, label],
+    })),
+  setSources: (s) => set({ sources: s }),
+  toggleSource: (label) =>
+    set((st) => ({
+      sources: st.sources.includes(label)
+        ? st.sources.filter((x) => x !== label)
+        : [...st.sources, label],
     })),
 }))
 

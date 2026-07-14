@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { RetailBackdrop } from '@/components/connie/RetailBackdrop'
 import { routes } from '@/app/routes'
-import { callConnieCached, peekConnieCache } from '@/api/connieClient'
+import { callConnie } from '@/api/connieClient'
 import {
   isDecisionSupport,
   isProductInsights,
@@ -1011,7 +1011,7 @@ function DetailedDeepDive({ onBack, product }: { onBack: () => void; product?: s
     if (didFetch.current || !product) return
     didFetch.current = true
     setLoading(true)
-    callConnieCached({ message: `What are the key insights on the ${product}?` })
+    callConnie({ message: `What are the key insights on the ${product}?` })
       .then((r) => {
         if (isProductInsights(r) && r.product_insights.insights.length > 0) {
           setLivePayload(r.product_insights)
@@ -1120,35 +1120,23 @@ export function DecisionSupportScreen() {
 
   // Fetch the live ranking once (guard against StrictMode double-invoke). Until it returns,
   // the baked data shows so the screen never breaks; live data swaps in when it arrives.
-  const preferences = usePreferences((s) => s.preferences)
+  const [livePayload, setLivePayload] = useState<DecisionSupportPayload | null>(null)
   const [reviewProduct, setReviewProduct] = useState<string | null>(null)
+  const preferences = usePreferences((s) => s.preferences)
   const didFetch = useRef(false)
-
-  /** Seed from the session cache so navigating back doesn't re-run the ranking (the heaviest call
-   *  in the flow). The cache is module-level, so it survives this component being unmounted. */
-  const cachedRanking = () => {
-    const hit = peekConnieCache({
-      message: 'Rank these strollers for me',
-      priorities: preferencesToPriorities(preferences) || undefined,
-    })
-    return hit && isDecisionSupport(hit) ? hit.decision_support : null
-  }
-  const [livePayload, setLivePayload] = useState<DecisionSupportPayload | null>(cachedRanking)
-
   // `decision_support` is the heaviest call in the flow (it ranks the whole roster with CR lookups)
   // and routinely takes 20-40s. Until it settles we show a shimmer, NOT the baked cards — those
   // name strollers that aren't even on the page, and they look completely real.
-  const [rankSettled, setRankSettled] = useState(livePayload !== null)
+  const [rankSettled, setRankSettled] = useState(false)
   useEffect(() => {
-    if (rankSettled) return
     // Ceiling, so a hung backend can't leave the user staring at a shimmer forever.
     const cap = window.setTimeout(() => setRankSettled(true), 45000)
     return () => window.clearTimeout(cap)
-  }, [rankSettled])
+  }, [])
   useEffect(() => {
     if (didFetch.current) return
     didFetch.current = true
-    callConnieCached({
+    callConnie({
       message: 'Rank these strollers for me',
       priorities: preferencesToPriorities(preferences) || undefined,
     })

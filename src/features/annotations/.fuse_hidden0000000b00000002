@@ -6,7 +6,7 @@ import { CRLauncher } from '@/components/connie/CRLauncher'
 import { NaviRail } from '@/components/connie/NaviRail'
 import { routes } from '@/app/routes'
 import { cn } from '@/lib/cn'
-import { callConnieCached, peekConnieCache } from '@/api/connieClient'
+import { callConnie } from '@/api/connieClient'
 import { isInlineAnnotations, type Evidence, type InlineAnnotation } from '@/types/connie-contract'
 import { cleanEvidence } from '@/lib/sourceFilter'
 import { usePreferences } from '@/store/usePreferences'
@@ -299,17 +299,12 @@ export function AnnotationsScreen() {
       closeTimer.current = null
     }
   }
-  // The 5s is a FLOOR, not the resolve condition. `loading` only becomes `result` once the
-  // annotation fetch has actually settled (see the promotion effect below) — otherwise the callout
-  // opens on a timer and renders the baked copy, which is indistinguishable from a real verdict.
-  const [verifyMinDone, setVerifyMinDone] = useState(false)
   const startVerify = () => {
     keepOpen()
     if (phase === 'result') return // already resolved — don't replay the animation
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    setVerifyMinDone(false)
     setPhase('loading')
-    hoverTimer.current = window.setTimeout(() => setVerifyMinDone(true), 5000)
+    hoverTimer.current = window.setTimeout(() => setPhase('result'), 5000)
   }
   /** Cursor left; dismiss after a grace period unless it comes back or the callout is pinned. */
   const cancelVerifySoon = () => {
@@ -327,67 +322,37 @@ export function AnnotationsScreen() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     hoverTimer.current = null
     setPinned(false)
-    setVerifyMinDone(false)
     setPhase('idle')
   }
 
   // Fetch live inline annotations once; index them by verdict so each callout can use its own.
-  const ANN_REQUEST = {
-    // Product must exist in the CR dataset (v5 roster — see `backend-data/README.md`), otherwise
-    // the agent has nothing to reconcile the page's claims against.
-    message: 'Verify the marketing claims on this Baby Trend Passport Switch 6-in-1 product page.',
-  }
-  /** Seed from the session cache so returning to this screen doesn't re-verify. */
-  const cachedAnns = () => {
-    const hit = peekConnieCache(ANN_REQUEST)
-    if (!hit || !isInlineAnnotations(hit)) return {}
-    const map: Record<string, InlineAnnotation> = {}
-    for (const a of hit.inline_annotations) map[a.verdict] = a
-    return map
-  }
-  const [annById, setAnnById] = useState<Record<string, InlineAnnotation>>(cachedAnns)
-  // Has the fetch finished (either way)? The verify animation must not resolve before this —
-  // otherwise the callout opens on a timer and shows the baked copy, which looks entirely real.
-  const [annSettled, setAnnSettled] = useState(() => peekConnieCache(ANN_REQUEST) !== null)
+  const [annById, setAnnById] = useState<Record<string, InlineAnnotation>>({})
   const didFetch = useRef(false)
   useEffect(() => {
-    if (didFetch.current || annSettled) return
+    if (didFetch.current) return
     didFetch.current = true
-    // Ceiling: a hung backend must not trap the user in a permanent "Verifying…" state. Keep this
-    // comfortably longer than a real call (this one does live web searches) — if it fires
-    // mid-flight, the baked callout appears while the real verdict is still coming.
-    const cap = window.setTimeout(() => setAnnSettled(true), 45000)
-    callConnieCached(ANN_REQUEST)
+    // Product must exist in the CR dataset (v5 roster — see `backend-data/README.md`), otherwise
+    // the agent has nothing to reconcile the page's claims against.
+    callConnieCached({
+      message:
+        'Verify the marketing claims on this Baby Trend Passport Switch 6-in-1 product page.',
+    })
       .then((r) => {
         if (isInlineAnnotations(r)) {
           const map: Record<string, InlineAnnotation> = {}
           for (const a of r.inline_annotations) map[a.verdict] = a
           setAnnById(map)
-        } else {
-          console.warn('[Connie] Annotations fell back to baked callouts: backend returned', r)
         }
       })
-      .catch((err) => {
-        console.warn('[Connie] Annotations fetch failed, showing baked callouts:', err)
+      .catch(() => {
+        /* keep baked callouts on error */
       })
-      .finally(() => {
-        window.clearTimeout(cap)
-        setAnnSettled(true)
-      })
-    return () => window.clearTimeout(cap)
-  }, [annSettled])
+  }, [])
   // Only use a live annotation if it still has valid evidence after filtering youtube/competitors;
   // otherwise fall back to the designed (evidenced) callout — never show an evidence-less claim.
   const valid = (a?: InlineAnnotation) => (a && cleanEvidence(a.evidence).length > 0 ? a : undefined)
   const connected = usePreferences((s) => s.sources) // communities picked in onboarding
   const annMis = valid(annById['misleading'])
-
-  // Promote loading → result only when BOTH are true: the animation has run its minimum, and the
-  // real verdict has arrived (or the fetch failed, in which case we fall back to the baked callout
-  // rather than hanging). This is what stops the mock from popping up mid-verify.
-  useEffect(() => {
-    if (phase === 'loading' && verifyMinDone && annSettled) setPhase('result')
-  }, [phase, verifyMinDone, annSettled])
 
   /* ---- Intro coach mark (arrives from Product Insights via ?intro=1) ---- */
   if (intro) {

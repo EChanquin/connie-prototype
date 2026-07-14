@@ -2,7 +2,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
 import { routes } from '@/app/routes'
-import { callConnieCached, peekConnieCache } from '@/api/connieClient'
+import { callConnie } from '@/api/connieClient'
 import { isProductInsights, type ProductInsightsPayload } from '@/types/connie-contract'
 import {
   usePreferences,
@@ -981,24 +981,13 @@ export function ProductInsightsScreen() {
   // the baked rows show so the screen never breaks; live data swaps in when it arrives.
   // Keep the raw payload, not the mapped rows — so connecting/disconnecting a community in
   // onboarding re-derives the rows immediately (no stale community posts, no refetch needed).
+  const [livePayload, setLivePayload] = useState<ProductInsightsPayload | null>(null)
   const preferences = usePreferences((s) => s.preferences)
   const sources = usePreferences((s) => s.sources)
   // Refetch whenever the preferences change (they drive the backend's insight ordering).
   // Keyed on the priority string, so StrictMode's double-invoke is skipped but a real
   // preference edit in the BASED ON popover triggers a fresh, correctly-ordered fetch.
   const priorityKey = preferencesToPriorities(preferences)
-
-  /** Already asked this exact question this session? Seed from the cache so navigating back to
-   *  this screen is instant — no refetch, no shimmer, no Vertex quota spent re-deriving an answer
-   *  we already have. The cache is module-level, so it survives React unmounting this component. */
-  const cachedInsights = () => {
-    const hit = peekConnieCache({
-      message: `What are the key insights on the ${LIVE_PRODUCT}?`,
-      priorities: priorityKey || undefined,
-    })
-    return hit && isProductInsights(hit) ? hit.product_insights : null
-  }
-  const [livePayload, setLivePayload] = useState<ProductInsightsPayload | null>(cachedInsights)
   const lastFetched = useRef<string | null>(null)
   useEffect(() => {
     if (lastFetched.current === priorityKey) return
@@ -1028,48 +1017,19 @@ export function ProductInsightsScreen() {
   // quota on page load and don't refetch when the user reopens the same card.
   const [notRecPayloads, setNotRecPayloads] = useState<
     Partial<Record<NotRecSlot, ProductInsightsPayload>>
-  >(() => {
-    // Seed both slots from the session cache, same as the recommended card.
-    const seed: Partial<Record<NotRecSlot, ProductInsightsPayload>> = {}
-    for (const slot of Object.keys(NOT_REC_PRODUCTS) as NotRecSlot[]) {
-      const hit = peekConnieCache({
-        message: `What are the key insights on the ${NOT_REC_PRODUCTS[slot].name}?`,
-        priorities: priorityKey || undefined,
-      })
-      if (hit && isProductInsights(hit)) seed[slot] = hit.product_insights
-    }
-    return seed
-  })
+  >({})
   // Keyed on `slot|priorities`: StrictMode's double-invoke is skipped, but switching badges or
   // editing preferences in the BASED ON popover triggers a fresh, correctly-ordered fetch.
   const notRecFetched = useRef<Set<string>>(new Set())
   // Has this slot's fetch finished (either way)? Drives the in-panel shimmer, so a NOT RECOMMENDED
   // card never shows mock rows while its real insights are still being generated.
-  const [notRecSettled, setNotRecSettled] = useState<Partial<Record<NotRecSlot, boolean>>>(() => {
-    // A slot seeded from the cache is already settled — no shimmer on a revisit.
-    const seed: Partial<Record<NotRecSlot, boolean>> = {}
-    for (const slot of Object.keys(NOT_REC_PRODUCTS) as NotRecSlot[]) {
-      if (
-        peekConnieCache({
-          message: `What are the key insights on the ${NOT_REC_PRODUCTS[slot].name}?`,
-          priorities: priorityKey || undefined,
-        })
-      )
-        seed[slot] = true
-    }
-    return seed
-  })
+  const [notRecSettled, setNotRecSettled] = useState<Partial<Record<NotRecSlot, boolean>>>({})
   useEffect(() => {
     if (variant !== 'notrec') return
     const key = `${notRecSlot}|${priorityKey}`
     if (notRecFetched.current.has(key)) return
     notRecFetched.current.add(key)
     setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: false }))
-    // Same ceiling as the recommended card — long enough not to fire during a normal call.
-    const cap = window.setTimeout(
-      () => setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: true })),
-      45000,
-    )
     callConnieCached({
       message: `What are the key insights on the ${NOT_REC_PRODUCTS[notRecSlot].name}?`,
       priorities: priorityKey || undefined,
@@ -1092,10 +1052,7 @@ export function ProductInsightsScreen() {
         console.warn(`[Connie] NOT RECOMMENDED (${notRecSlot}) fetch failed, showing mock:`, err)
       })
       // Settled either way: live data replaces the shimmer, a failure falls back to mock rows.
-      .finally(() => {
-        window.clearTimeout(cap)
-        setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: true }))
-      })
+      .finally(() => setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: true })))
   }, [variant, notRecSlot, priorityKey])
   const notRecPayload = notRecPayloads[notRecSlot] ?? null
   const notRecLive = notRecPayload ? insightsToRows(notRecPayload, sources) : null
@@ -1110,27 +1067,18 @@ export function ProductInsightsScreen() {
   // mock rows behind an animation that claimed we'd analysed the page. Now it holds until the real
   // fetch settles, with her 5s as a FLOOR so it never flashes, and a 20s ceiling so a hung backend
   // can't trap the user behind a permanent shimmer.
-  //
-  // If the answer is already cached (we've been on this screen before), skip the whole thing —
-  // re-running a 5s "Analyzing…" animation over data we already have is theatre, not feedback.
-  const alreadyCached = livePayload !== null
   const MIN_SHIMMER_MS = 5000
-  // Ceiling only, for a hung backend. It must be comfortably LONGER than a real call: a
-  // `product_insights` request does live web searches and routinely runs past 20s. Set it too low
-  // and the ceiling fires mid-flight, revealing the mock rows while the real answer is still on its
-  // way — which is the exact failure this shimmer exists to prevent.
-  const MAX_SHIMMER_MS = 45000
-  const [minShimmerDone, setMinShimmerDone] = useState(alreadyCached)
-  const [insightsSettled, setInsightsSettled] = useState(alreadyCached)
+  const MAX_SHIMMER_MS = 20000
+  const [minShimmerDone, setMinShimmerDone] = useState(false)
+  const [insightsSettled, setInsightsSettled] = useState(false)
   useEffect(() => {
-    if (alreadyCached) return
     const min = window.setTimeout(() => setMinShimmerDone(true), MIN_SHIMMER_MS)
     const max = window.setTimeout(() => setInsightsSettled(true), MAX_SHIMMER_MS)
     return () => {
       window.clearTimeout(min)
       window.clearTimeout(max)
     }
-  }, [alreadyCached])
+  }, [])
   const generating = !minShimmerDone || !insightsSettled
 
   const frame: ReactNode = (
