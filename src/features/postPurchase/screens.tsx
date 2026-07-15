@@ -96,7 +96,6 @@ export function PostPurchaseScreen() {
   const [q2, setQ2] = useState<string | null>(null)
   const [q3, setQ3] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const threadRef = useRef<HTMLDivElement>(null)
 
   // Fetch the live check-in once (guard against StrictMode double-invoke). Baked copy shows
   // until it returns, then live message + sentiment options swap in.
@@ -123,11 +122,6 @@ export function PostPurchaseScreen() {
   }, [])
   const sentimentChips = sentiments ?? ['Love it', "It's fine", 'Not what I hoped']
 
-  // Pin the thread to the newest message as the conversation grows.
-  useEffect(() => {
-    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
-  }, [q1, q2, q3, open])
-
   return (
     <FigmaFrame bg="#f4f4f5">
       <Backdrop />
@@ -144,7 +138,6 @@ export function PostPurchaseScreen() {
 
       {open && (
         <ChatPanel
-          threadRef={threadRef}
           onClose={() => setOpen(false)}
           composer={
             <ChatComposer

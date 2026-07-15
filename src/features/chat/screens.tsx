@@ -125,11 +125,6 @@ export function ChatScreen() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const idRef = useRef(1)
-  const threadRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
-  }, [messages, loading])
 
   const send = async () => {
     const text = input.trim()
@@ -175,7 +170,6 @@ export function ChatScreen() {
       <NaviRail active="chat" />
 
       <ChatPanel
-        threadRef={threadRef}
         onClose={() => navigate(routes.annotations)}
         composer={
           <ChatComposer

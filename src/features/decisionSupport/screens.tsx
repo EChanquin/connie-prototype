@@ -16,15 +16,8 @@ import { communityPosts, type CommunitySource } from '@/mocks/communityPosts'
 import { NaviRail } from '@/components/connie/NaviRail'
 import { ProductBackdrop } from '@/components/connie/RetailBackdrop'
 import { DimOverlay } from '@/components/connie/DimOverlay'
-import {
-  IconSafety,
-  IconCompass,
-  IconFold,
-  IconComfort,
-  IconWeight,
-  IconDurability,
-  IconCaretDown,
-} from '@/components/icons'
+import { rows as insightRows, type RowData } from '@/features/productInsights/screens'
+import { IconCaretDown } from '@/components/icons'
 
 /* ------------------------------------------------------------------ *
  * Decision Support — faithful reproduction of Figma frames
@@ -56,13 +49,15 @@ const asset = {
   share: `${A}share.svg`,
   trash: `${A}trash.svg`,
   whyCheck: `${A}whyfits-check.svg`,
-  // Five distinct product photos. The first three are the strollers actually on the retail page,
-  // cropped from that same screenshot — so a card's photo is the product it's describing.
+  // Five distinct product photos, each cropped from the retailer page the product actually
+  // appears on in this prototype — the three strollers on the Amazon search page, plus the
+  // Evenflo (the product detail page she browses) and the Joie from that page's rail.
+  // The old prod-vista / prod-citymini shots were 160×160 and went soft at card size.
   prodAero: `${A}prod-aero.png`,
   prodBabyTrend: `${A}prod-babytrend.png`,
   prodGraco: `${A}prod-graco.png`,
-  prodVista: `${A}prod-vista.png`,
-  prodCity: `${A}prod-citymini.png`,
+  prodEvenflo: `${A}prod-evenflo.png`,
+  prodJoie: `${A}prod-joie.png`,
   avCr: `${A}av-cr.png`,
   avReddit: `${A}av-reddit.png`,
   naviChat: `${A}navi-chat.svg`,
@@ -183,23 +178,72 @@ function SelectionHeader({
   )
 }
 
-/* ------------------------------------------------------------ Retailer mark */
-const RETAILER_STYLE: Record<string, { bg: string; fg: string; glyph: string }> = {
-  AMAZON: { bg: '#ff9900', fg: '#111', glyph: 'a' },
-  WALMART: { bg: '#0071ce', fg: '#fff', glyph: 'W' },
-  TARGET: { bg: '#cc0000', fg: '#fff', glyph: '◎' },
-  MOCKINGBIRD: { bg: '#2f3a2f', fg: '#fff', glyph: 'M' },
+/* ---------------------------------------------------------- Retailer logos */
+/**
+ * The retailers' actual wordmarks, not coloured initials in a circle — a shopper reads "which
+ * store is this price at?" from the logo they already know, and a generic "W" chip answers a
+ * different question than the Walmart spark does.
+ */
+
+/** amazon — wordmark + the smile arc beneath it. */
+function AmazonLogo() {
+  return (
+    <span className="relative inline-flex shrink-0 flex-col items-center leading-none">
+      <span className="text-[12px] font-bold lowercase tracking-[-0.4px] text-[#232f3e]">amazon</span>
+      <svg width="30" height="5" viewBox="0 0 30 5" className="-mt-[1px]" aria-hidden>
+        <path d="M1.5 1.2c6.5 4 20.5 4 27 0" stroke="#FF9900" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+        <path d="M26 0.6l2.8 0.6-1.4 2z" fill="#FF9900" />
+      </svg>
+    </span>
+  )
 }
 
-/** The retailer's logo chip, sat next to the price. */
-function RetailerMark({ retailer }: { retailer: string }) {
-  const s = RETAILER_STYLE[retailer.toUpperCase()] ?? { bg: '#77767b', fg: '#fff', glyph: retailer.charAt(0) }
+/** Walmart — wordmark + the yellow spark. */
+function WalmartLogo() {
   return (
-    <span
-      className="flex size-[16px] shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none"
-      style={{ background: s.bg, color: s.fg }}
-    >
-      {s.glyph}
+    <span className="inline-flex shrink-0 items-center gap-[3px] leading-none">
+      <span className="text-[12px] font-bold tracking-[-0.2px] text-[#0071ce]">Walmart</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden>
+        {[0, 60, 120, 180, 240, 300].map((deg) => (
+          <rect
+            key={deg}
+            x="10.7"
+            y="1.5"
+            width="2.6"
+            height="8"
+            rx="1.3"
+            fill="#FFC220"
+            transform={`rotate(${deg} 12 12)`}
+          />
+        ))}
+      </svg>
+    </span>
+  )
+}
+
+/** Target — the bullseye + wordmark. */
+function TargetLogo() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-[3px] leading-none">
+      <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden>
+        <circle cx="12" cy="12" r="11" fill="#CC0000" />
+        <circle cx="12" cy="12" r="7" fill="#fff" />
+        <circle cx="12" cy="12" r="3.5" fill="#CC0000" />
+      </svg>
+      <span className="text-[12px] font-bold tracking-[-0.2px] text-[#CC0000]">Target</span>
+    </span>
+  )
+}
+
+export function RetailerLogo({ retailer }: { retailer: string }) {
+  const r = retailer.toUpperCase()
+  if (r.includes('AMAZON')) return <AmazonLogo />
+  if (r.includes('WALMART')) return <WalmartLogo />
+  if (r.includes('TARGET')) return <TargetLogo />
+  // Anything the agent surfaces that we don't have a mark for: the name, set plainly.
+  return (
+    <span className="shrink-0 text-[12px] font-bold capitalize leading-none text-fg-primary">
+      {retailer.toLowerCase()}
     </span>
   )
 }
@@ -214,11 +258,11 @@ function PriceRow({ card, onCompareHover }: { card: Card; onCompareHover?: (h: b
       <button
         onMouseEnter={() => onCompareHover?.(true)}
         onMouseLeave={() => onCompareHover?.(false)}
-        className="flex cursor-pointer items-center gap-[6px] rounded-[6px] bg-bg-tertiary px-[8px] py-[4px] transition-colors hover:bg-border-subtle"
+        aria-label={`Compare prices — currently ${retailer}`}
+        className="flex cursor-pointer items-center gap-[6px] rounded-[6px] bg-bg-tertiary px-[8px] py-[5px] transition-colors hover:bg-border-subtle"
       >
-        <RetailerMark retailer={retailer} />
-        <span className="whitespace-nowrap text-[13px] leading-[18px] text-fg-secondary">{retailer}</span>
-        <IconCaretDown size={11} className="text-fg-secondary" />
+        <RetailerLogo retailer={retailer} />
+        <IconCaretDown size={11} className="shrink-0 text-fg-secondary" />
       </button>
     </div>
   )
@@ -258,37 +302,40 @@ export const cards: Card[] = [
     whyLong:
       'Matches your priority on easy fold and everyday reliability. CR scored it top-tier for maneuverability and safety at a fraction of the price of the premium field. High durability ensures long-term value.',
     chips: [
-      { img: asset.avCr, label: 'CR 2024 Lab Results' },
-      { img: asset.avReddit, label: 'Reddit Community' },
+      { img: asset.avCr, label: 'CR Stroller Ratings 2024' },
+      { img: asset.avReddit, label: 'r/BeyondTheBump · “Passport Switch, 6 months in”' },
     ],
     primaryBtn: true,
   },
   {
-    id: 'vista',
-    img: asset.prodVista,
+    id: 'evenflo',
+    img: asset.prodEvenflo,
     rank: '#2 RUNNER UP',
     rankBrand: false,
-    title: 'UppaBaby Vista V2',
-    price: '$999.00',
+    title: 'Evenflo Pivot NXT Travel System',
+    price: '$379.99',
     at: 'AT AMAZON',
-    why: 'The strongest all-terrain performer we tested — dual-action suspension rated top-tier for gravel and uneven paths. Heavy for stairs.',
+    why: 'The smoothest ride in the group and a genuinely one-handed fold. Loses to the Passport on price, and the basket is smaller than it looks.',
     whyLong:
-      'The strongest all-terrain performer we tested — dual-action suspension rated top-tier for gravel and uneven paths. Heavy for stairs, which counts against your walk-up.',
-    chips: [{ img: asset.avCr, label: 'CR 2024 Lab Results' }],
+      'The smoothest ride in the group and a genuinely one-handed fold. Loses to the Passport on price, and the basket is smaller than it looks — worth a look if comfort outranks value for you.',
+    chips: [
+      { img: asset.avCr, label: 'CR Test Report · Pivot NXT' },
+      { img: asset.avReddit, label: 'r/NewParents · “Pivot NXT vs Passport?”' },
+    ],
     primaryBtn: false,
   },
   {
-    id: 'city',
-    img: asset.prodCity,
+    id: 'joie',
+    img: asset.prodJoie,
     rank: '#3 LIGHTEST',
     rankBrand: false,
-    title: 'Baby Jogger City Mini GT2',
-    price: '$399.99',
+    title: 'Joie Baby Kava & Rue Travel System',
+    price: '$549.99',
     at: 'AT WALMART',
-    why: 'Excellent for your secondary need for compact storage. One-hand quick fold outperforms competitors in tight trunks.',
+    why: 'The lightest full travel system here, and it clears a turnstile — the one to beat if the stairs are what worry you. Pricey for the spec.',
     whyLong:
-      'Excellent for your secondary need for compact storage. One-hand quick fold outperforms competitors in tight trunks.',
-    chips: [{ img: asset.avCr, label: 'Safety Certification' }],
+      'The lightest full travel system here, and it clears a turnstile — the one to beat if the stairs are what worry you. Pricey for the spec.',
+    chips: [{ img: asset.avCr, label: 'CR Safety Certification · Kava' }],
     primaryBtn: false,
   },
   {
@@ -302,7 +349,7 @@ export const cards: Card[] = [
     why: 'Only worth it if you need two seats. CR scored it 58/100 — a wide turning radius and a bulky fold make it a poor fit for a walk-up.',
     whyLong:
       'Only worth it if you need two seats. CR scored it 58/100 — a wide turning radius and a bulky fold make it a poor fit for a walk-up and public transit.',
-    chips: [{ img: asset.avCr, label: 'CR 2024 Lab Results' }],
+    chips: [{ img: asset.avCr, label: 'CR Stroller Ratings 2024' }],
     primaryBtn: false,
   },
   {
@@ -316,15 +363,15 @@ export const cards: Card[] = [
     why: "The cheapest option on the shelf, and it shows: CR scored it 54/100 with low marks for ride comfort and durability.",
     whyLong:
       "The cheapest option on the shelf, and it shows: CR scored it 54/100 with low marks for ride comfort and durability. Fine as a spare; not as your only stroller.",
-    chips: [{ img: asset.avReddit, label: 'Reddit Community' }],
+    chips: [{ img: asset.avReddit, label: 'r/Parenting · “Umbrella strollers, honestly?”' }],
     primaryBtn: false,
   },
 ]
 
 /* ----- "ranking" shimmer, shown while decision_support is still generating ----- */
 /** Placeholder cards in the same yellow-green gradient as Product Insights' GeneratingOverlay.
- *  Exists so the screen never shows the baked mock roster (Vista / City Mini / Lite 3 — strollers
- *  that aren't even on the retail page) while the real ranking is still in flight. */
+ *  Exists so the screen never shows the baked fallback roster while the real ranking is still
+ *  in flight — the baked cards look entirely real. */
 function RankingShimmer({ count = 3 }: { count?: number }) {
   return (
     <div className="flex w-full flex-col gap-[20px]" aria-busy="true" aria-label="Ranking strollers">
@@ -370,14 +417,14 @@ function RankingShimmer({ count = 3 }: { count?: number }) {
  * from that page); anything else the agent surfaces falls back to a generic stroller photo, and
  * alternates so a live list never shows the same picture five times.
  */
-const FALLBACK_IMAGES = [asset.prodVista, asset.prodCity]
+const FALLBACK_IMAGES = [asset.prodEvenflo, asset.prodJoie]
 function productImage(name: string, index = 0): string {
   const n = name.toLowerCase()
   if (n.includes('baby trend') || n.includes('passport')) return asset.prodBabyTrend
   if (n.includes('graco') || n.includes('ready2grow')) return asset.prodGraco
   if (n.includes('dream on me') || n.includes('aero')) return asset.prodAero
-  if (n.includes('city mini') || n.includes('gt2')) return asset.prodCity
-  if (n.includes('vista') || n.includes('uppababy')) return asset.prodVista
+  if (n.includes('evenflo') || n.includes('pivot')) return asset.prodEvenflo
+  if (n.includes('joie') || n.includes('kava')) return asset.prodJoie
   return FALLBACK_IMAGES[index % FALLBACK_IMAGES.length]
 }
 
@@ -530,24 +577,29 @@ export function CompactCard({
 }
 
 /* ------------------------------------------------------ Compare popover */
-type Retailer = { name: string; price: string; deal: string; dealColor: string; primary: boolean }
+type Retailer = { name: string; price: string; deal: string; dealColor: string }
 const retailers: Retailer[] = [
-  { name: 'Amazon', price: '$899.99', deal: 'PRIME DEAL: 10% OFF', dealColor: 'text-fg-brand', primary: true },
-  { name: 'Target', price: '$949.99', deal: 'REDCARD: 5% OFF', dealColor: 'text-fg-brand', primary: false },
-  { name: 'BuyBuy Baby', price: '$999.00', deal: 'FREE SHIPPING', dealColor: 'text-fg-secondary', primary: false },
+  { name: 'Amazon', price: '$199.99', deal: 'PRIME DEAL: 10% OFF', dealColor: 'text-fg-brand' },
+  { name: 'Target', price: '$214.99', deal: 'REDCARD: 5% OFF', dealColor: 'text-fg-brand' },
+  { name: 'Walmart', price: '$219.00', deal: 'FREE SHIPPING', dealColor: 'text-fg-secondary' },
 ]
 
 function ComparePopover({
   onClose,
   onHover,
+  expanded = false,
 }: {
   onClose: () => void
   onHover?: (hovering: boolean) => void
+  /** The expanded panel is 900 wide, so the popover clears it further from the right edge. */
+  expanded?: boolean
 }) {
   return (
     <div
-      className="absolute z-20 flex flex-col gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
-      style={{ right: 70, top: 276, width: 288 }}
+      className="absolute z-30 flex flex-col gap-[16px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[17px] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
+      /* Sits under the retailer chip it drops from, in both panel widths — at 450 it landed on
+         top of the product photo, which is the one thing on the card you don't want covered. */
+      style={{ right: expanded ? 120 : 70, top: 276, width: 288 }}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
     >
@@ -561,16 +613,14 @@ function ComparePopover({
         {retailers.map((r) => (
           <div key={r.name} className="flex flex-col gap-[4px] border-b border-border-subtle pb-[9px]">
             <div className="flex items-baseline justify-between">
-              <span className="text-[16px] leading-[24px] text-fg-primary">{r.name}</span>
+              <RetailerLogo retailer={r.name} />
               <span className="text-[14px] leading-[20px] text-fg-primary">{r.price}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className={`text-[12px] font-semibold leading-[16px] ${r.dealColor}`}>{r.deal}</span>
-              <button
-                className={`flex items-center justify-center rounded-[12px] px-[12px] py-[4px] text-[12px] font-semibold leading-[16px] ${
-                  r.primary ? 'bg-brand text-fg-inverse' : 'border border-border-subtle bg-bg-tertiary text-fg-secondary'
-                }`}
-              >
+              {/* Every row's button is the same button. Greening one of them reads as "Connie
+                  recommends this retailer", which is a claim CR isn't making. */}
+              <button className="flex items-center justify-center rounded-[12px] border border-border-subtle bg-bg-tertiary px-[12px] py-[4px] text-[12px] font-semibold leading-[16px] text-fg-secondary transition-colors hover:bg-border-subtle">
                 View Deal
               </button>
             </div>
@@ -591,12 +641,14 @@ type TableRow = {
   terrain: boolean
   price: string
 }
+/** The same five products as `cards`, in the same order — the table is a different view of one
+ *  list, so the two must never name different strollers. */
 const tableRows: TableRow[] = [
-  { name: 'Vista V2', badge: 'BEST', badgeType: 'best', fold: '2-Step', weight: '27lb', terrain: true, price: '$999' },
-  { name: 'GT2', badge: 'RUNNER', badgeType: 'runner', fold: '1-Hand', weight: '21lb', terrain: true, price: '$449' },
-  { name: 'Lite 3', badge: 'NOT REC', badgeType: 'notrec', fold: '3-Step', weight: '15lb', terrain: false, price: '$199' },
-  { name: 'Mockingbird', fold: '2-Step', weight: '26lb', terrain: true, price: '$650' },
-  { name: 'Cruz V2', fold: '2-Step', weight: '25lb', terrain: true, price: '$699' },
+  { name: 'Passport Switch', badge: 'BEST', badgeType: 'best', fold: '1-Hand', weight: '23lb', terrain: true, price: '$199' },
+  { name: 'Pivot NXT', badge: 'RUNNER', badgeType: 'runner', fold: '1-Hand', weight: '27lb', terrain: true, price: '$379' },
+  { name: 'Kava & Rue', fold: '2-Step', weight: '19lb', terrain: true, price: '$549' },
+  { name: 'Ready2Grow 2.0', badge: 'NOT REC', badgeType: 'notrec', fold: '3-Step', weight: '34lb', terrain: false, price: '$299' },
+  { name: 'Aero Umbrella', badge: 'NOT REC', badgeType: 'notrec', fold: '2-Step', weight: '12lb', terrain: false, price: '$33' },
 ]
 
 function TerrainMark({ ok }: { ok: boolean }) {
@@ -638,17 +690,15 @@ function InsightCallout({ verdict }: { verdict?: string | null }) {
       <p className="flex-1 text-[16px] leading-[24px] text-fg-primary">
         {verdict
           ? `CR Verdict: ${verdict}`
-          : 'CR Verdict: The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your "Rural/Active" preference profile.'}
+          : 'CR Verdict: The Passport Switch gives up little to strollers five times its price, and its one-hand fold is the one that matters for a walk-up.'}
       </p>
     </div>
   )
 }
 
-/** Pick a stroller thumbnail for a table row (only two product photos exist). */
+/** Pick a stroller thumbnail for a table row — same mapping the cards use. */
 function tableRowImage(name: string): string {
-  const n = name.toLowerCase()
-  if (n.includes('gt2') || n.includes('city') || n.includes('lite') || n.includes('minu')) return asset.prodCity
-  return asset.prodVista
+  return productImage(name)
 }
 
 /** Standard comparison table — 6 columns: select · Product · Fold · Weight · Terrain · Price.
@@ -761,95 +811,64 @@ function ExpandedVerdictBanner({ product, verdict }: { product?: Card; verdict?:
   return (
     <div className="flex w-full shrink-0 items-center gap-[16px] rounded-[16px] bg-gradient-to-r from-[rgba(217,237,226,0.3)] to-[rgba(251,245,221,0.3)] p-[16px]">
       <div className="flex size-[64px] shrink-0 items-center justify-center overflow-clip rounded-[8px] bg-bg-tertiary">
-        <img src={product?.img ?? asset.prodVista} alt="" className="size-full object-cover" />
+        <img src={product?.img ?? asset.prodBabyTrend} alt="" className="size-full object-cover" />
       </div>
       <div className="flex w-[200px] shrink-0 flex-col gap-[4px]">
         <div className="flex w-fit rounded-[4px] bg-bg-brand-muted px-[8px] py-[2px]">
           <span className="text-[12px] font-semibold leading-[16px] text-fg-brand">CR Verdict</span>
         </div>
-        <p className="text-[18px] font-semibold leading-[22px] text-fg-primary">{product?.title ?? 'UppaBaby Vista V2'}</p>
-        <p className="text-[14px] leading-[20px] text-fg-primary">{product?.price ?? '$999.00'}</p>
+        <p className="text-[18px] font-semibold leading-[22px] text-fg-primary">{product?.title ?? 'Baby Trend Passport Switch 6-in-1'}</p>
+        <p className="text-[14px] leading-[20px] text-fg-primary">{product?.price ?? '$199.99'}</p>
       </div>
       <p className="flex-1 text-[16px] leading-[24px] text-fg-secondary">
         {verdict ??
-          'The Vista V2 is heavier but offers superior durability and all-terrain performance which matches your "Rural/Active" preference profile.'}
+          'The Passport Switch gives up little to strollers five times its price, and its one-hand fold is the one that matters for a walk-up.'}
       </p>
     </div>
   )
 }
 
 /* --------------------------------------------------- Expanded card + metrics */
-type MetricIcon = (p: { size?: number; className?: string }) => JSX.Element
-type Metric = { title: string; text: string; Icon: MetricIcon }
+/**
+ * "Show details" renders the SAME six insights as the Product Insights card — same icons, same
+ * titles, same copy, same source stack — imported from that screen rather than restated here.
+ * They're one product's claims shown in two places; restating them is how they drift.
+ */
+const metrics = insightRows
 
-/** All six things CR scores a stroller on — the full picture, not a sample of three. */
-const metrics: Metric[] = [
-  {
-    title: 'Safety',
-    text: 'Five-point harness and a parking brake that held on every incline our testers ran.',
-    Icon: IconSafety,
-  },
-  {
-    title: 'Maneuverability',
-    text: 'Handles sidewalks and curbs effortlessly; tight turning radius in our urban course.',
-    Icon: IconCompass,
-  },
-  {
-    title: 'Ease of fold',
-    text: 'Snaps open and folds shut in seconds — one hand, no wrestling.',
-    Icon: IconFold,
-  },
-  {
-    title: 'Comfort',
-    text: 'Plush seat, smooth suspension. Fewer complaints from the passenger seat.',
-    Icon: IconComfort,
-  },
-  {
-    title: 'Weight',
-    text: "Middle of the pack — manageable day to day, but you'll feel it on stairs.",
-    Icon: IconWeight,
-  },
-  {
-    title: 'Durability',
-    text: 'High-quality fabrics and wheels that make resale easy and hand-me-downs an option.',
-    Icon: IconDurability,
-  },
-]
-
-function MetricSources() {
+/** The overlapping source avatars + "+1", matching the Product Insights row exactly. */
+function MetricSources({ imgs }: { imgs: string[] }) {
   return (
-    <div className="flex items-center gap-[10px]">
-      <div className="relative flex size-[28px] items-center opacity-60">
-        <img
-          src={`${I}av5.png`}
-          alt=""
-          className="absolute left-[14px] top-[4px] size-[20px] rounded-full border-[0.5px] border-white object-cover"
-        />
-        <img
-          src={`${I}av7.png`}
-          alt=""
-          className="size-[20px] rounded-full border-[0.5px] border-white object-cover"
-        />
+    <div className="flex shrink-0 items-center gap-[2px]">
+      <div className="relative h-[20px] w-[28px] opacity-80">
+        {imgs.slice(0, 2).map((src, i) => (
+          <img
+            key={i}
+            src={src}
+            alt=""
+            className="absolute top-0 size-[16px] rounded-full border-[0.5px] border-white object-cover"
+            style={{ left: i * 11 }}
+          />
+        ))}
       </div>
-      <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-secondary">+1</span>
+      <span className="whitespace-nowrap text-[12px] font-semibold leading-[16px] text-fg-secondary">+1</span>
     </div>
   )
 }
 
-function MetricCard({ m }: { m: Metric }) {
+/** One insight, laid out to match the Product Insights row: icon tile, title + source stack, copy. */
+function MetricCard({ m }: { m: RowData }) {
   return (
-    <div className="flex items-start gap-[14px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[16px]">
-      <div className="flex size-[40px] shrink-0 items-center justify-center rounded-full bg-bg-tertiary">
-        <m.Icon size={20} className="text-fg-primary" />
+    <div className="flex items-start gap-[12px] overflow-clip rounded-[8px] border border-border-subtle bg-bg-primary p-[16px]">
+      <div className="flex size-[32px] shrink-0 items-center justify-center rounded-[8px] bg-bg-secondary">
+        <img src={m.icon} alt="" style={{ width: m.iconSize, height: m.iconSize }} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-        <div className="flex items-center gap-[8px]">
-          <span className="whitespace-nowrap text-[14px] font-semibold leading-[20px] text-fg-primary">
-            {m.title}
-          </span>
-          <MetricSources />
+        <div className="flex items-center justify-between gap-[8px]">
+          <span className="text-[14px] font-semibold leading-[20px] text-fg-primary">{m.title}</span>
+          <MetricSources imgs={m.sources} />
         </div>
-        <p className="text-[14px] leading-[20px] text-fg-secondary">{m.text}</p>
+        <p className="text-[14px] leading-[20px] text-[#282923]">{m.subtitle}</p>
       </div>
     </div>
   )
@@ -861,12 +880,14 @@ function ExpandedCard({
   onCheck,
   showDetails,
   onToggleDetails,
+  onCompareHover,
 }: {
   card: Card
   checked: boolean
   onCheck: () => void
   showDetails: boolean
   onToggleDetails: () => void
+  onCompareHover?: (hovering: boolean) => void
 }) {
   return (
     <div className="flex w-full items-start gap-[8px]">
@@ -887,14 +908,15 @@ function ExpandedCard({
               </button>
             </div>
           </div>
-          {/* right column */}
-          <div className="flex h-[311px] w-[429px] shrink-0 flex-col gap-[19px]">
+          {/* Right column. min-h, not h: the source pills are real link titles now and wrap to a
+              second line, which a fixed 311px column would spill into the metrics grid below. */}
+          <div className="flex min-h-[311px] w-[429px] shrink-0 flex-col gap-[16px]">
             <div className="flex flex-col gap-[5px] pt-[4px]">
               <div className="flex w-fit rounded-[8px] bg-bg-brand-muted px-[10px] py-[5px]">
                 <span className="whitespace-nowrap text-[14px] leading-[20px] text-fg-brand">{card.rank}</span>
               </div>
               <p className="text-[14px] font-semibold leading-[20px] text-fg-primary">{card.title}</p>
-              <PriceRow card={card} />
+              <PriceRow card={card} onCompareHover={onCompareHover} />
             </div>
             <WhyThisFits text={card.whyLong} pad={17} />
             <div className="flex flex-wrap gap-[8px]">
@@ -1107,17 +1129,12 @@ function DetailedDeepDive({ onBack, product }: { onBack: () => void; product?: s
 
   return (
     <div className="flex w-full flex-1 flex-col gap-[20px] overflow-auto pt-[8px]">
-      {/* RECOMMENDED + Save */}
-      <div className="flex w-full items-center justify-between">
-        <div className="flex items-center gap-[10px]">
-          <img src={`${I}star.svg`} alt="" className="size-[20px]" />
-          <span className="text-[18px] font-semibold leading-[22px] tracking-[-0.25px] text-fg-primary">RECOMMENDED</span>
-          <img src={`${I}info.svg`} alt="" className="size-[20px]" />
-        </div>
-        <button className="flex h-[36px] items-center justify-center gap-[6px] rounded-[24px] border border-border-subtle bg-white px-[16px]">
-          <span className="text-[14px] font-semibold leading-[20px] text-fg-secondary">Save</span>
-          <img src={`${I}save.svg`} alt="" className="h-[11px] w-[13px]" />
-        </button>
+      {/* RECOMMENDED. No Save here — you reached this from your own saved list, so the product
+          is already saved and the button had nothing to do. */}
+      <div className="flex w-full items-center gap-[10px]">
+        <img src={`${I}star.svg`} alt="" className="size-[20px]" />
+        <span className="text-[18px] font-semibold leading-[22px] tracking-[-0.25px] text-fg-primary">RECOMMENDED</span>
+        <img src={`${I}info.svg`} alt="" className="size-[20px]" />
       </div>
 
       {/* DID YOU KNOW */}
@@ -1252,8 +1269,8 @@ export function DecisionSupportScreen() {
         if (isDecisionSupport(r) && r.decision_support.products.length > 0) {
           setLivePayload(r.decision_support)
         } else {
-          // Wrong response_type or empty products — the screen silently shows the baked Vista /
-          // City Mini / Lite 3 mock, which looks real. Say so.
+          // Wrong response_type or empty products — the screen silently shows the baked
+          // fallback roster, which looks real. Say so.
           console.warn('[Connie] Decision Support fell back to mock data: backend returned', r)
         }
       })
@@ -1386,7 +1403,7 @@ export function DecisionSupportScreen() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
                 </button>
                 <div className="flex flex-col">
-                  <span className="text-[16px] font-semibold leading-[22px] text-fg-primary">{reviewProduct ?? topCard?.title ?? 'UppaBaby Vista V2'}</span>
+                  <span className="text-[16px] font-semibold leading-[22px] text-fg-primary">{reviewProduct ?? topCard?.title ?? 'Baby Trend Passport Switch 6-in-1'}</span>
                   <span className="text-[14px] leading-[20px] text-fg-secondary">Full Review Deep-dive</span>
                 </div>
               </div>
@@ -1453,6 +1470,7 @@ export function DecisionSupportScreen() {
                           onCheck={() => toggle(c.id)}
                           showDetails={detailsOpen.has(c.id)}
                           onToggleDetails={() => toggleDetails(c.id)}
+                          onCompareHover={setHoverCompare}
                         />
                       ))
                     : activeCards.map((c) => (
@@ -1476,9 +1494,11 @@ export function DecisionSupportScreen() {
       </div>
 
       {/* Compare Prices popover — frame-level overlay (Figma 1052:4619).
-          Shows on Compare mode OR when hovering a card's retailer chip. Prices are static. */}
-      {(mode === 'compare' || hoverCompare) && view === 'cards' && !expanded && (
-        <ComparePopover onClose={() => setMode(null)} onHover={setHoverCompare} />
+          Shows on Compare mode OR when hovering a card's retailer chip, in both the collapsed and
+          expanded card views: the chip looks identical in each, so it has to behave identically.
+          Prices are static (see HANDOFF §5 — illustrative, not live). */}
+      {(mode === 'compare' || hoverCompare) && view === 'cards' && (
+        <ComparePopover onClose={() => setMode(null)} onHover={setHoverCompare} expanded={expanded} />
       )}
 
       <NaviRail active="saved" />

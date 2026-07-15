@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ConnieHeader } from './ConnieHeader'
 import { LOADING_MS } from '@/lib/timing'
 import { cn } from '@/lib/cn'
@@ -21,14 +21,35 @@ export function ChatPanel({
   onClose,
   children,
   composer,
-  /** Scroll container ref, so a screen can pin the thread to the newest message. */
-  threadRef,
 }: {
   onClose?: () => void
   children: ReactNode
   composer?: ReactNode
-  threadRef?: React.Ref<HTMLDivElement>
 }) {
+  const scrollEl = useRef<HTMLDivElement>(null)
+  const contentEl = useRef<HTMLDivElement>(null)
+
+  /**
+   * Keep the thread pinned to the newest message.
+   *
+   * This lives here, watching the content box actually grow, rather than in each screen keyed on
+   * a step counter. A turn's content lands a LOADING_MS beat *after* the state change that
+   * triggered it, so scrolling on the state change scrolls before there's anything to scroll to —
+   * and the bubble then arrives below the fold, which looks exactly like nothing happened.
+   */
+  useEffect(() => {
+    const scroller = scrollEl.current
+    const content = contentEl.current
+    if (!scroller || !content) return
+    const pin = () => {
+      scroller.scrollTop = scroller.scrollHeight
+    }
+    pin()
+    const ro = new ResizeObserver(pin)
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <div
       className="absolute z-20 flex flex-col items-start overflow-clip rounded-[16px] border border-border-subtle bg-bg-secondary shadow-panel"
@@ -40,10 +61,12 @@ export function ChatPanel({
 
       {/* Thread */}
       <div
-        ref={threadRef}
-        className="flex min-h-0 w-full flex-1 flex-col items-start gap-[24px] overflow-y-auto overflow-x-clip bg-bg-secondary px-[28px] pb-[24px] pt-[20px]"
+        ref={scrollEl}
+        className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-clip bg-bg-secondary px-[28px] pb-[24px] pt-[20px]"
       >
-        {children}
+        <div ref={contentEl} className="flex w-full flex-col items-start gap-[24px]">
+          {children}
+        </div>
       </div>
 
       {composer && (
@@ -113,15 +136,46 @@ export function ThinkingBubble() {
  *
  * Everything Connie "says" goes through this. Nothing Connie says should appear instantly —
  * instant means precomputed, and precomputed is exactly what we're claiming it isn't.
+ *
+ * Turns must be CHAINED, not fired together: gate each one's `when` on the previous turn's
+ * `onDone`. Two thinking bubbles spinning at once reads as two separate things loading, when
+ * really it's one assistant taking one turn and then taking another.
+ *
+ * ⚠️ ALWAYS give a Turn a stable `key`, especially where a branch swaps one set of turns for
+ * another. React unwraps keyless fragments and matches children by POSITION, so a `<Turn>` in
+ * one branch will be reconciled against the `<Turn>` at the same index in the other — reusing
+ * its fiber, and with it a stale `ready: true`. The reused turn then renders its content with no
+ * thinking beat, and because its `when` never transitioned the effect below never re-runs, so
+ * `onDone` never fires and every turn chained behind it stalls forever. Keys make React match by
+ * identity instead, which is the only thing that makes the reuse impossible.
  */
-export function Turn({ when = true, children }: { when?: boolean; children: ReactNode }) {
+export function Turn({
+  when = true,
+  onDone,
+  children,
+}: {
+  when?: boolean
+  /** Fires once this turn's content lands — gate the next turn's `when` on it. */
+  onDone?: () => void
+  children: ReactNode
+}) {
   const [ready, setReady] = useState(false)
+  // Held in a ref so a caller passing an inline arrow doesn't restart the beat every render.
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
   useEffect(() => {
     if (!when) {
       setReady(false)
       return
     }
-    const t = window.setTimeout(() => setReady(true), LOADING_MS)
+    // Re-assert `ready: false` on every activation, not just on deactivation. If this fiber was
+    // recycled from another branch it can arrive already-ready, and the guard above would never
+    // have run to clear it.
+    setReady(false)
+    const t = window.setTimeout(() => {
+      setReady(true)
+      onDoneRef.current?.()
+    }, LOADING_MS)
     return () => window.clearTimeout(t)
   }, [when])
   if (!when) return null
@@ -199,27 +253,40 @@ export function ChatComposer({
   disabled?: boolean
 }) {
   return (
-    <div className="flex w-full items-center gap-[10px] rounded-[16px] border border-border-strong bg-bg-primary py-[9px] pl-[16px] pr-[9px] focus-within:border-brand">
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && value.trim()) onSend?.()
-        }}
-        placeholder={placeholder}
-        aria-label="Message Connie"
-        className="min-w-0 flex-1 bg-transparent text-[15px] leading-[24px] text-fg-primary outline-none placeholder:text-fg-secondary"
-      />
-      <button
-        onClick={onSend}
-        disabled={disabled || !value.trim()}
-        aria-label="Send"
-        className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-fg-primary text-white transition-opacity disabled:opacity-35"
-      >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 19V5M5 12l7-7 7 7" />
-        </svg>
-      </button>
+    /* The outline is a live yellow-green gradient panning behind the field — the same palette as
+       every other "Connie is working" moment (the shimmer, the verify card), so the composer reads
+       as part of the assistant rather than a plain form control. It's a 1.5px padded wrapper with
+       the field sitting on top, because a border can't hold a gradient. */
+    <div
+      className="w-full animate-gradient-pan rounded-[16px] p-[1.5px]"
+      style={{
+        background:
+          'linear-gradient(90deg, #d9ede2 0%, #bfd730 25%, #fbf5dd 50%, #bfd730 75%, #d9ede2 100%)',
+        backgroundSize: '300% 100%',
+      }}
+    >
+      <div className="flex w-full items-center gap-[10px] rounded-[14.5px] bg-bg-primary py-[8px] pl-[16px] pr-[8px]">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && value.trim()) onSend?.()
+          }}
+          placeholder={placeholder}
+          aria-label="Message Connie"
+          className="min-w-0 flex-1 bg-transparent text-[15px] leading-[24px] text-fg-primary outline-none placeholder:text-fg-secondary"
+        />
+        <button
+          onClick={onSend}
+          disabled={disabled || !value.trim()}
+          aria-label="Send"
+          className="flex size-[36px] shrink-0 items-center justify-center rounded-full bg-fg-primary text-white transition-opacity disabled:opacity-35"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

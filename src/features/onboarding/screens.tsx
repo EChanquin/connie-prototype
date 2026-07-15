@@ -1,8 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
-import { BrowserChrome, CHROME_H, GoogleFavicon } from '@/components/browser/BrowserChrome'
+import {
+  BrowserChrome,
+  CHROME_H,
+  GoogleFavicon,
+  ChromeStoreFavicon,
+} from '@/components/browser/BrowserChrome'
 import { GoogleNewTab } from '@/components/browser/GoogleNewTab'
 import { GoogleResults } from '@/components/browser/GoogleResults'
 import { ConnieHeader } from '@/components/connie/ConnieHeader'
@@ -135,40 +140,94 @@ const TABS = (activeTitle: string) => [
   { title: 'Inbox (3)', favicon: <GoogleFavicon size={14} /> },
 ]
 
-/* ---------- N0 · Chrome Web Store install ---------- */
+/* ---------- N0 · Chrome Web Store install ----------
+ * Installing an extension doesn't navigate you anywhere: you stay on the listing, the button
+ * flips to "Added", and Chrome drops the icon into the toolbar. So the story here is
+ * click Add → see it added → open a new tab yourself. */
 export function InstallScreen() {
   const navigate = useNavigate()
+  const installed = useJourneyStore((s) => s.hasInstalled)
   const setInstalled = useJourneyStore((s) => s.setInstalled)
-  const install = () => {
-    setInstalled(true)
-    navigate(routes.search)
-  }
+  /** Chrome's install confirmation. It sits over the "Added to Chrome" button, so it clears
+   *  itself after a beat rather than hiding the state change it's announcing. */
+  const [toast, setToast] = useState(false)
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [toast])
   const metaText = 'font-medium text-[16.337px]'
   return (
-    <FigmaFrame>
-      {/* Navigation bar — approximated Chrome Web Store chrome */}
-      <div className="absolute left-0 top-0 flex h-[106px] w-[1440px] items-center border-b border-[#ececec] bg-white">
+    <FigmaFrame bg="#f7f8fa">
+      {/* The same browser chrome as every other screen — the Web Store is just another tab. */}
+      <BrowserChrome
+        tabs={[
+          { title: 'Baby registry checklist', favicon: <GoogleFavicon size={14} /> },
+          { title: 'Connie — Chrome Web Store', favicon: <ChromeStoreFavicon />, active: true },
+          { title: 'Inbox (3)', favicon: <GoogleFavicon size={14} /> },
+        ]}
+        url="https://chromewebstore.google.com/detail/connie"
+        showExtension={installed}
+        highlightExtension={false}
+        onNewTab={() => navigate(routes.search)}
+        highlightNewTab={installed}
+      />
+
+      {/* Chrome's own "extension added" confirmation, anchored under the toolbar icon. */}
+      {toast && (
+        <div
+          className="absolute z-20 w-[340px] rounded-[10px] border border-[#dadce0] bg-white p-[18px] shadow-[0px_8px_24px_rgba(0,0,0,0.18)]"
+          style={{ right: 40, top: CHROME_H + 8 }}
+        >
+          <div className="flex items-start gap-[12px]">
+            <img src="/figma/C.png" alt="" className="size-[32px] shrink-0 object-contain" />
+            <div className="flex flex-col gap-[6px]">
+              <p className="text-[15px] font-medium text-[#202124]">
+                Connie has been added to Chrome
+              </p>
+              <p className="text-[13px] leading-[18px] text-[#5f6368]">
+                Open a new tab and click the Connie icon to get set up.
+              </p>
+            </div>
+            <button
+              aria-label="Dismiss"
+              onClick={() => setToast(false)}
+              className="-mr-[4px] -mt-[4px] shrink-0 text-[16px] leading-none text-[#5f6368]"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* The Web Store's own page nav, below the browser chrome. */}
+      <div
+        className="absolute left-0 flex h-[58px] w-[1440px] items-center border-b border-[#ececec] bg-white"
+        style={{ top: CHROME_H }}
+      >
         <div className="flex items-center gap-[10px] pl-[20px]">
           <span
-            className="inline-block size-[26px] rounded-full"
+            className="inline-block size-[24px] rounded-full"
             style={{
               background:
                 'conic-gradient(#ea4335 0 25%, #4285f4 25% 50%, #34a853 50% 75%, #fbbc05 75% 100%)',
             }}
           />
-          <span className="text-[15px] text-[#5f6368]">chrome web store</span>
+          <span className="text-[14px] text-[#5f6368]">chrome web store</span>
         </div>
-        <div className="mx-auto flex h-[42px] w-[520px] items-center gap-[10px] rounded-full bg-[#f1f3f4] px-[18px] text-[#5f6368]">
-          <span className="text-[15px]">🔍</span>
-          <span className="text-[14px]">Search extensions and themes</span>
+        <div className="mx-auto flex h-[38px] w-[520px] items-center gap-[10px] rounded-full bg-[#f1f3f4] px-[18px] text-[#5f6368]">
+          <span className="text-[14px]">🔍</span>
+          <span className="text-[13px]">Search extensions and themes</span>
         </div>
         <div className="flex items-center gap-[16px] pr-[24px] text-[#5f6368]">
-          <span className="text-[18px]">⋮</span>
-          <span className="text-[16px]">▦</span>
-          <span className="inline-block size-[26px] rounded-full bg-[#cfcfcf]" />
+          <span className="text-[16px]">⋮</span>
+          <span className="text-[15px]">▦</span>
+          <span className="inline-block size-[24px] rounded-full bg-[#cfcfcf]" />
         </div>
       </div>
 
+      {/* Listing content. Wrapped and pushed down so the original Figma coordinates still hold. */}
+      <div className="absolute left-0 w-[1440px]" style={{ top: 40 }}>
       {/* Header */}
       <div className="absolute flex flex-col gap-[26px]" style={{ left: 209, top: 116, width: 1021 }}>
         <div className="flex items-center justify-between">
@@ -187,12 +246,24 @@ export function InstallScreen() {
               Connie: Consumer Reports AI Shopping Assistant
             </p>
           </div>
-          <button
-            onClick={install}
-            className="flex h-[37px] w-[142px] items-center justify-center rounded-full bg-[#6699f2] text-[13.254px] font-medium text-white"
-          >
-            Add to Chrome
-          </button>
+          {installed ? (
+            <div className="flex h-[37px] items-center justify-center gap-[7px] rounded-full border border-[#dadce0] bg-white px-[18px]">
+              <IconCheck size={15} className="text-[#188038]" />
+              <span className="whitespace-nowrap text-[13.254px] font-medium text-[#5f6368]">
+                Added to Chrome
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setInstalled(true)
+                setToast(true)
+              }}
+              className="flex h-[37px] w-[142px] items-center justify-center rounded-full bg-[#6699f2] text-[13.254px] font-medium text-white transition-colors hover:bg-[#5a8ce6]"
+            >
+              Add to Chrome
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-[19px]">
@@ -282,6 +353,7 @@ export function InstallScreen() {
       </div>
 
       <p className="absolute left-[209px] top-[827px] text-[26.307px] font-bold text-black">Overview</p>
+      </div>
     </FigmaFrame>
   )
 }

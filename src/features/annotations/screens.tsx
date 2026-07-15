@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FigmaFrame } from '@/layouts/FigmaFrame'
+import { routes } from '@/app/routes'
+import { useCollabStore } from '@/store/useCollabStore'
 import { NaviRail } from '@/components/connie/NaviRail'
 import { ProductBackdrop } from '@/components/connie/RetailBackdrop'
 import { DimOverlay } from '@/components/connie/DimOverlay'
@@ -9,7 +12,6 @@ import { LOADING_MS, MAX_LOADING_MS } from '@/lib/timing'
 import { callConnieCached, peekConnieCache } from '@/api/connieClient'
 import { isInlineAnnotations, type Evidence, type InlineAnnotation } from '@/types/connie-contract'
 import { cleanEvidence } from '@/lib/sourceFilter'
-import { usePreferences } from '@/store/usePreferences'
 
 /* ---------- Annotation asset paths (public/figma) ---------- */
 const asset = {
@@ -265,6 +267,10 @@ function HighlightNudge({ onDismiss }: { onDismiss: () => void }) {
  * gets verified. Connie only ever checks what you point at.
  */
 export function AnnotationsScreen() {
+  const navigate = useNavigate()
+  /** Once the list has been shared, the shopping half of the story is done — this is where the
+   *  time-skip into the post-purchase check-in lives. */
+  const hasShared = useCollabStore((s) => s.shared)
   type Phase = 'idle' | 'loading' | 'result'
   const [phase, setPhase] = useState<Phase>('idle')
   const [nudge, setNudge] = useState(false)
@@ -273,11 +279,13 @@ export function AnnotationsScreen() {
   const [selection, setSelection] = useState<Rect | null>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
 
-  /* --- Connie's "bing" a beat after landing on the page --- */
+  /* --- Connie's "bing" a beat after landing on the page. Not once the list has been shared:
+         by then the shopper has done the verifying, and the only thing left is the time skip. --- */
   useEffect(() => {
+    if (hasShared) return
     const t = window.setTimeout(() => setNudge(true), 900)
     return () => window.clearTimeout(t)
-  }, [])
+  }, [hasShared])
 
   /* --- Drag to select --- */
   const pointFromEvent = (e: React.PointerEvent) => {
@@ -381,7 +389,6 @@ export function AnnotationsScreen() {
   // Only use a live annotation if it still has valid evidence after filtering youtube/competitors;
   // otherwise fall back to the designed (evidenced) callout — never show an evidence-less claim.
   const valid = (a?: InlineAnnotation) => (a && cleanEvidence(a.evidence).length > 0 ? a : undefined)
-  const connected = usePreferences((s) => s.sources) // communities picked in onboarding
   const annMis = valid(annById['misleading'])
 
   // Promote loading → result only when BOTH are true: the animation has run its minimum, and the
@@ -456,29 +463,49 @@ export function AnnotationsScreen() {
           {annMis ? (
             <LiveSources evidence={annMis.evidence} />
           ) : (
+            /* The designed callout: CR's lab finding beside the community's, which is the whole
+               point of the verdict — one source alone doesn't make a claim "misleading". */
             <SourceRow>
               <SourceCard
                 avatar={asset.avatarCr}
-                name="Consumer Reports "
+                name="Consumer Reports"
                 quote={crSeatQuote}
-                chip="Baby Trend Stroller Review"
+                chip="CR Stroller Test Report"
                 fixed={false}
               />
-              {connected.includes('Reddit') && (
-                <SourceCard
-                  avatar={asset.avatarReddit}
-                  name="Reddit"
-                  quote={redditFussQuote}
-                  chip="Best Strollers: Thread"
-                  fixed={false}
-                />
-              )}
+              <SourceCard
+                avatar={asset.avatarReddit}
+                name="Reddit"
+                quote={redditFussQuote}
+                chip="r/BeyondTheBump · “Seat padding?”"
+                fixed={false}
+              />
             </SourceRow>
           )}
         </Callout>
       )}
 
       {nudge && phase === 'idle' && <HighlightNudge onDismiss={() => setNudge(false)} />}
+
+      {/* The scene transition into the post-purchase loop. It only appears once the list has been
+          shared, because that's the end of the shopping story — before then there's nothing to
+          check in about. Deliberately styled as a chapter marker, not as page furniture: it's the
+          prototype's clock, not something the real extension would render. */}
+      {hasShared && (
+        <button
+          onClick={() => navigate(routes.postPurchase)}
+          className="absolute left-1/2 top-[104px] z-30 flex -translate-x-1/2 items-center gap-[10px] rounded-pill bg-fg-primary py-[10px] pl-[18px] pr-[16px] text-white shadow-panel transition-transform hover:scale-[1.03]"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" strokeLinecap="round" />
+          </svg>
+          <span className="whitespace-nowrap text-[14px] font-semibold leading-[20px]">
+            Two weeks later
+          </span>
+          <span className="text-[14px] leading-[20px] text-white/60">→</span>
+        </button>
+      )}
 
       <NaviRail notify={nudge && phase === 'idle'} />
     </FigmaFrame>

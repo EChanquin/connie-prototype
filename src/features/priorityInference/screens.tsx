@@ -137,8 +137,15 @@ export function PriorityInferenceScreen() {
   const raw = parseInt(params.get('step') || '1', 10)
   const initial = Number.isNaN(raw) ? 1 : Math.min(8, Math.max(1, raw))
   const [step, setStep] = useState(initial)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const [draft, setDraft] = useState('')
+
+  /**
+   * Which of Connie's turns have finished loading. Each turn's `when` is gated on the previous
+   * turn being done, so the thread loads one bubble at a time — Connie answers, *then* asks the
+   * next question, the way a conversation actually goes.
+   */
+  const [said, setSaid] = useState<Record<string, boolean>>({})
+  const mark = (k: string) => () => setSaid((s) => (s[k] ? s : { ...s, [k]: true }))
 
   // Fetch Connie's inferred starting priorities once (guard against StrictMode double-invoke).
   const [liveIntro, setLiveIntro] = useState<string | null>(null)
@@ -167,11 +174,6 @@ export function PriorityInferenceScreen() {
     setStep(c)
     setParams({ step: String(c) }, { replace: true })
   }
-
-  // Chat auto-scrolls to the newest content (matches each Figma scroll position).
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [step])
 
   /** The suggested actions now live in the composer's placeholder, not in a row of pills. */
   const placeholder =
@@ -206,14 +208,13 @@ export function PriorityInferenceScreen() {
       <DimOverlay onClick={() => navigate(routes.annotations)} />
 
       <ChatPanel
-        threadRef={scrollRef}
         onClose={() => navigate(routes.annotations)}
         composer={
           <ChatComposer value={draft} onChange={setDraft} onSend={() => setDraft('')} placeholder={placeholder} />
         }
       >
         {step === 1 ? (
-          <Turn when>
+          <Turn key="start" when>
             <ConnieGroup>
               <BotBubble>
                 Shopping for a stroller? I can figure out what fits your life or take you straight to
@@ -237,7 +238,7 @@ export function PriorityInferenceScreen() {
           </Turn>
         ) : (
           <>
-            <Turn when>
+            <Turn key="intro" when onDone={mark('intro')}>
               <ConnieGroup>
                 <BotBubble>
                   {liveIntro ??
@@ -247,7 +248,7 @@ export function PriorityInferenceScreen() {
               </ConnieGroup>
             </Turn>
 
-            <Turn when>
+            <Turn key="living" when={!!said.intro} onDone={mark('living')}>
               <ConnieGroup>
                 <BotBubble>
                   To help narrow the best options, do you live in an apartment or a house?
@@ -275,7 +276,7 @@ export function PriorityInferenceScreen() {
               </ConnieGroup>
             </Turn>
 
-            <Turn when={step >= 4}>
+            <Turn key="lightweight" when={step >= 4 && !!said.living} onDone={mark('lightweight')}>
               <ConnieGroup>
                 <BotBubble>
                   Good to know! Since you'll be carrying your stroller up stairs, we'll prioritize
@@ -288,7 +289,7 @@ export function PriorityInferenceScreen() {
               </ConnieGroup>
             </Turn>
 
-            <Turn when={step >= 4}>
+            <Turn key="commute" when={step >= 4 && !!said.lightweight} onDone={mark('commute')}>
               <ConnieGroup>
                 <BotBubble>Which best describes how you'll usually travel with your stroller?</BotBubble>
                 <ChipRow>
@@ -304,7 +305,7 @@ export function PriorityInferenceScreen() {
               </ConnieGroup>
             </Turn>
 
-            <Turn when={step >= 7}>
+            <Turn key="fold" when={step >= 7 && !!said.commute} onDone={mark('fold')}>
               <ConnieGroup>
                 <BotBubble>
                   Got it! We'll prioritize strollers that are lightweight and easy to fold for trips
@@ -317,7 +318,7 @@ export function PriorityInferenceScreen() {
               </ConnieGroup>
             </Turn>
 
-            <Turn when={step >= 7}>
+            <Turn key="matches" when={step >= 7 && !!said.fold}>
               <ConnieGroup>
                 <BotBubble>
                   <>

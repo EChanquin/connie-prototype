@@ -225,7 +225,9 @@ export function CollaborationScreen() {
   const go = (s: Stage) => setParams({ stage: s }, { replace: true })
 
   const [listName, setListName] = useState('Strollers for the twins')
-  const [recipients, setRecipients] = useState<string[]>(['Alex'])
+  /** Empty: the shopper types the name and commits it to a pill, the same as any share sheet.
+   *  Pre-filling "Alex" put words in her mouth and skipped the only interaction on the screen. */
+  const [recipients, setRecipients] = useState<string[]>([])
 
   /* ----- Shared list ----- */
   if (stage === 'shared') {

@@ -43,6 +43,21 @@ function ConnieExtensionIcon({ size = 20 }: { size?: number }) {
   return <img src="/figma/C.png" alt="" className="object-contain" style={{ width: size, height: size }} />
 }
 
+/** The Chrome Web Store's four-colour mark, for its own tab. */
+export function ChromeStoreFavicon({ size = 14 }: { size?: number }) {
+  return (
+    <span
+      className="inline-block rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background:
+          'conic-gradient(#ea4335 0 25%, #4285f4 25% 50%, #34a853 50% 75%, #fbbc05 75% 100%)',
+      }}
+    />
+  )
+}
+
 function PuzzleIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="1.6" aria-hidden>
@@ -86,6 +101,10 @@ export function BrowserChrome({
   highlightExtension = false,
   /** Hides the Connie icon entirely — used before the extension is installed. */
   showExtension = true,
+  /** Click handler for the tab strip's "+" — opens a new tab. */
+  onNewTab,
+  /** Draws attention to the "+" (used right after install, when it's the next step). */
+  highlightNewTab = false,
 }: {
   tabs: BrowserTab[]
   url?: string
@@ -93,6 +112,8 @@ export function BrowserChrome({
   onExtensionClick?: () => void
   highlightExtension?: boolean
   showExtension?: boolean
+  onNewTab?: () => void
+  highlightNewTab?: boolean
 }) {
   return (
     <div className="absolute left-0 top-0 w-[1440px]" style={{ height: CHROME_H }}>
@@ -124,9 +145,21 @@ export function BrowserChrome({
           </div>
         ))}
         {/* New-tab "+" */}
-        <span className="mb-[6px] ml-[4px] flex size-[24px] shrink-0 items-center justify-center rounded-full text-[16px] leading-none text-[#5f6368]">
-          +
-        </span>
+        <div className="relative mb-[6px] ml-[4px] flex size-[24px] shrink-0 items-center justify-center">
+          {highlightNewTab && (
+            <span className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-brand opacity-40" />
+          )}
+          <button
+            aria-label="New tab"
+            onClick={onNewTab}
+            className={cn(
+              'relative flex size-[24px] items-center justify-center rounded-full text-[16px] leading-none text-[#5f6368] transition-colors hover:bg-[#c2c6cb]',
+              highlightNewTab && 'bg-white ring-2 ring-brand',
+            )}
+          >
+            +
+          </button>
+        </div>
         <span className="flex-1" />
       </div>
 

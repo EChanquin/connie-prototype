@@ -98,7 +98,7 @@ function Sources({
 
 /* ------------------------------------------------------------ Recommended row */
 type DetailBlock = { source: string; text: string; chipImg: string; chipLabel: string }
-type RowData = {
+export type RowData = {
   icon: string
   iconSize: number
   title: string
@@ -111,7 +111,14 @@ const av5 = `${A}av5.png`
 const av7 = `${A}av7.png`
 const av18 = `${A}av18.png`
 
-const rows: RowData[] = [
+/**
+ * The six things Connie says about a recommended stroller.
+ *
+ * EXPORTED, and reused verbatim by Decision Support's "Show details" grid — the two are the same
+ * claims about the same product, so they read from one list rather than two that drift apart.
+ * (These are the baked fallback; live `product_insights` replaces them here via `insightsToRows`.)
+ */
+export const rows: RowData[] = [
   {
     icon: `${A}toprated.svg`,
     iconSize: 20,
@@ -207,13 +214,34 @@ const rows: RowData[] = [
         source: 'Consumer Reports',
         text: 'The one-hand fold engaged reliably every time in our repeated open/close trials.',
         chipImg: av7,
-        chipLabel: 'Fold Mechanism Test',
+        chipLabel: 'CR Fold Mechanism Test',
       },
       {
         source: 'Reddit',
         text: 'Frequent flyers love how quickly it collapses at the gate and in the trunk.',
         chipImg: av5,
-        chipLabel: 'Travel Thread',
+        chipLabel: 'r/Travel · “Gate-checking strollers”',
+      },
+    ],
+  },
+  {
+    icon: `${A}safety.svg`,
+    iconSize: 20,
+    title: 'Safety First',
+    subtitle: 'Five-point harness and a brake that held on every incline our testers ran.',
+    sources: [av7, av5],
+    detail: [
+      {
+        source: 'Consumer Reports',
+        text: 'Passed every stability and brake-hold test at full incline, with no harness slippage across repeated loading.',
+        chipImg: av7,
+        chipLabel: 'CR Safety Test Report',
+      },
+      {
+        source: 'Reddit',
+        text: 'Parents consistently mention the harness staying put even with a determined toddler.',
+        chipImg: av5,
+        chipLabel: 'r/BeyondTheBump · “Harness escape artists”',
       },
     ],
   },
