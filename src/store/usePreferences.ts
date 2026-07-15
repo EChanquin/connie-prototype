@@ -26,7 +26,6 @@ const DEFAULT_SOURCES: string[] = []
 export const ALL_PREFERENCES = [
   'Long-term reliability',
   'Value for price',
-  'Aesthetics',
   'Ease of use',
   'Sustainability',
 ]

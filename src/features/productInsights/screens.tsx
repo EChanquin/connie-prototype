@@ -27,7 +27,6 @@ import {
   IconHeart,
   IconShieldCheck,
   IconTag,
-  IconSparkle,
   IconHandTap,
   IconLeaf,
 } from '@/components/icons'
@@ -470,7 +469,6 @@ const COMMUNITY_ICON: Record<string, string> = {
 const PREFERENCE_ICON: Record<string, (p: { size?: number; className?: string }) => JSX.Element> = {
   'Long-term reliability': IconShieldCheck,
   'Value for price': IconTag,
-  Aesthetics: IconSparkle,
   'Ease of use': IconHandTap,
   Sustainability: IconLeaf,
 }
@@ -516,12 +514,14 @@ function BasedOnPopover({
   const togglePreference = usePreferences((s) => s.togglePreference)
   const [editing, setEditing] = useState(false)
 
-  /* Editing offers every named community plus anything she typed under onboarding's "Other" —
-     without the second half, a custom source would vanish from the list that's meant to edit it. */
+  /* Editing offers every named option plus anything she typed under onboarding's "Other" — without
+     the second half, a custom source/value would vanish from the list that's meant to edit it. */
   const shownSources = editing
     ? [...ALL_COMMUNITIES, ...sources.filter((s) => !ALL_COMMUNITIES.includes(s))]
     : sources
-  const shownPreferences = editing ? ALL_PREFERENCES : preferences
+  const shownPreferences = editing
+    ? [...ALL_PREFERENCES, ...preferences.filter((p) => !ALL_PREFERENCES.includes(p))]
+    : preferences
 
   return (
     <div

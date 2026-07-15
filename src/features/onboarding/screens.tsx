@@ -23,7 +23,6 @@ import {
   IconCaretRight,
   IconShieldCheck,
   IconTag,
-  IconSparkle,
   IconHandTap,
   IconLeaf,
 } from '@/components/icons'
@@ -887,7 +886,6 @@ type PriorityIcon = (p: { size?: number; className?: string }) => JSX.Element
 const PRIORITIES: { label: string; Icon: PriorityIcon }[] = [
   { label: 'Long-term reliability', Icon: IconShieldCheck },
   { label: 'Value for price', Icon: IconTag },
-  { label: 'Aesthetics', Icon: IconSparkle },
   { label: 'Ease of use', Icon: IconHandTap },
   { label: 'Sustainability', Icon: IconLeaf },
 ]
@@ -896,6 +894,23 @@ export function SurveyPrioritiesScreen() {
   const navigate = useNavigate()
   const selected = usePreferences((s) => s.preferences)
   const toggle = usePreferences((s) => s.togglePreference)
+
+  /** Anything she typed under "Other" — a chosen value that isn't one of the named ones. */
+  const named = PRIORITIES.map((p) => p.label)
+  const custom = selected.filter((s) => !named.includes(s))
+
+  /* Same disclosure as Q1: "Other" opens the field rather than being an answer itself, and stays
+     open while there are custom values, because closing it would hide the chips it created. */
+  const [otherOpen, setOtherOpen] = useState(custom.length > 0)
+  const [draft, setDraft] = useState('')
+
+  const addCustom = () => {
+    const value = draft.trim()
+    if (!value || selected.includes(value)) return setDraft('')
+    toggle(value)
+    setDraft('')
+  }
+
   return (
     <FigmaFrame>
       <OnboardingBackdrop />
@@ -906,18 +921,15 @@ export function SurveyPrioritiesScreen() {
             What do you usually care about when shopping?
           </p>
         </div>
-        <div className="flex w-full flex-col gap-[20px]">
-          <div className="flex w-full flex-col gap-[4px]">
+        <div className="flex w-full flex-col gap-[15px]">
+          <div className="flex w-full flex-col">
             <p className="w-full text-body text-fg-primary">
               What are some values that show up on every purchase? Pick as many as you like.
             </p>
-            <p className="w-full text-[14px] leading-[20px] text-fg-secondary">
-              You can add more or tweak them later in the chat.
-            </p>
           </div>
-          {/* Tight padding on purpose: it's what keeps Aesthetics / Ease of use / Sustainability
-              on one row inside the 520px panel instead of orphaning the last pill. */}
-          <div className="flex w-full flex-wrap gap-[6px]">
+          {/* Tight padding on purpose: it's what keeps the pills to two rows inside the 520px
+              panel instead of orphaning the last one. */}
+          <div className="flex w-full flex-wrap gap-[9px]">
             {PRIORITIES.map(({ label, Icon }) => {
               const on = selected.includes(label)
               return (
@@ -933,7 +945,57 @@ export function SurveyPrioritiesScreen() {
                 </button>
               )
             })}
+
+            {/* Whatever she named under "Other" — same chips as the rest, tap to remove. */}
+            {custom.map((label) => (
+              <button
+                key={label}
+                onClick={() => toggle(label)}
+                aria-label={`Remove ${label}`}
+                className="flex h-[46px] items-center justify-center gap-[6px] overflow-clip rounded-pill border-2 border-border-black bg-bg-primary px-[12px] py-[11px]"
+              >
+                <span className="whitespace-nowrap text-body text-fg-primary">{label}</span>
+                <IconX size={14} className="shrink-0 text-fg-secondary" />
+              </button>
+            ))}
+
+            <button
+              onClick={() => setOtherOpen((o) => !o)}
+              aria-expanded={otherOpen}
+              className={`flex h-[46px] items-center justify-center gap-[6px] overflow-clip rounded-pill bg-bg-primary px-[12px] py-[11px] ${
+                otherOpen ? 'border-2 border-border-black' : 'border border-border-subtle'
+              }`}
+            >
+              <IconPlus size={18} className="shrink-0 text-fg-primary" />
+              <span className="whitespace-nowrap text-body text-fg-primary">Other</span>
+            </button>
           </div>
+
+          {otherOpen && (
+            <div className="flex w-full flex-col gap-[8px]">
+              <div className="flex w-full items-center gap-[8px]">
+                <input
+                  value={draft}
+                  autoFocus
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addCustom()}
+                  placeholder="What else? e.g. Safety, Resale value…"
+                  aria-label="Add another value"
+                  className="h-[44px] min-w-0 flex-1 rounded-[8px] border border-border-strong bg-bg-primary px-[14px] text-body text-fg-primary outline-none placeholder:text-fg-secondary focus:border-brand"
+                />
+                <button
+                  onClick={addCustom}
+                  disabled={!draft.trim()}
+                  className="flex h-[44px] shrink-0 items-center justify-center rounded-pill bg-brand px-[18px] text-body font-semibold text-fg-inverse disabled:bg-bg-disabled"
+                >
+                  Add
+                </button>
+              </div>
+              <p className="text-utility text-fg-secondary">
+                Add as many as you like — press Enter after each.
+              </p>
+            </div>
+          )}
         </div>
         <PrimaryButton onClick={() => navigate(routes.permissions)}>Next</PrimaryButton>
       </Panel>
