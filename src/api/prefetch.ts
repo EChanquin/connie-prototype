@@ -19,9 +19,14 @@
  */
 
 import { callConnieCached, type CallConnieOptions } from './connieClient';
+import { ANNOTATION_REQUEST_MESSAGE } from './connieRequests';
 
-/** Gap between warm calls AFTER each finishes, to let the per-minute Vertex quota recover. */
-const GAP_MS = 3000;
+/** Gap between warm calls AFTER each finishes, to let the per-minute Vertex quota recover.
+ *  Each product_insights call makes several Vertex calls internally, so on a low student-tier
+ *  per-minute quota, back-to-back warm calls still trip a 429 even when run sequentially. A longer
+ *  gap spaces the Vertex usage out across the per-minute window. Slower to finish warming, but it
+ *  actually completes instead of throttling the later (not-recommended) cards. */
+const GAP_MS = 10000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,8 +51,10 @@ export async function warmConnieForDemo(priorities?: string): Promise<void> {
     { message: 'What are the key insights on the Baby Trend Passport Switch 6-in-1?', priorities: p }, // recommended (green)
     { message: 'What are the key insights on the Dream On Me Aero Travel Umbrella Stroller?', priorities: p }, // not-rec (left grey)
     { message: 'What are the key insights on the Graco Ready2Grow 2.0 Double Stroller?', priorities: p }, // not-rec (right grey)
-    // Decision Support ranking. (Annotations is intentionally NOT warmed: the cloud agent tends to
-    // answer it with chat, so warming it just spends quota on a call that falls back anyway.)
+    // Inline annotations — same message the annotations screen sends (shared constant), so the
+    // cache key matches and the screen opens warm.
+    { message: ANNOTATION_REQUEST_MESSAGE }, // annotations
+    // Decision Support ranking.
     { message: 'Rank these strollers for me', priorities: p }, // decision support
   ];
 

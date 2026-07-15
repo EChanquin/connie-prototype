@@ -7,7 +7,7 @@ import { useCollabStore } from '@/store/useCollabStore'
 import { NaviRail } from '@/components/connie/NaviRail'
 import { ProductBackdrop } from '@/components/connie/RetailBackdrop'
 import { DimOverlay } from '@/components/connie/DimOverlay'
-import { ABOUT_BULLETS } from '@/components/retail/AmazonProductPage'
+import { ANNOTATION_REQUEST_MESSAGE } from '@/api/connieRequests'
 import { cn } from '@/lib/cn'
 import { LOADING_MS, MAX_LOADING_MS } from '@/lib/timing'
 import { callConnieCached, peekConnieCache } from '@/api/connieClient'
@@ -351,17 +351,7 @@ export function AnnotationsScreen() {
   // asking us to provide them. With the claims in hand it reconciles each against the CR lab data:
   // the "FOLDS WITH ONE HAND" claim is the key one — CR's data says it's a two-step, two-handed,
   // bulky fold, so it should come back `misleading`.
-  const ANN_REQUEST = {
-    message:
-      'Verify these marketing claims from the Baby Trend Passport Switch 6-in-1 Amazon product ' +
-      'page. For each claim, reconcile it against Consumer Reports lab data and community feedback, ' +
-      'and return an inline_annotations response (one entry per claim). Flag any claim that the CR ' +
-      'lab data contradicts as "misleading". For every misleading claim, include TWO evidence ' +
-      'items: the Consumer Reports lab finding first, then a real community or owner quote (Reddit ' +
-      'or a parenting forum) that echoes it, so the shopper sees both the lab data and social ' +
-      'proof.\n\nClaims:\n' +
-      ABOUT_BULLETS.map((b, i) => `${i + 1}. "${b.lead} ${b.rest}"`).join('\n'),
-  }
+  const ANN_REQUEST = { message: ANNOTATION_REQUEST_MESSAGE }
   /** Seed from the session cache so returning to this screen doesn't re-verify. */
   const cachedAnns = () => {
     const hit = peekConnieCache(ANN_REQUEST)
