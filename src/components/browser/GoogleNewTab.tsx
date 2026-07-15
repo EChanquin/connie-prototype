@@ -26,16 +26,18 @@ function GoogleWordmark() {
   )
 }
 
-export type Shortcut = { label: string; glyph: string; bg: string; fg?: string }
+export type Shortcut = { label: string; icon: string }
 
-/** The shopper's most-visited tiles. Amazon is the one that matters to the story. */
+/** The shopper's most-visited tiles, each with the site's real logo. Amazon is the one that
+ *  matters to the story. Chrome frames every favicon in the same neutral disc, so the tiles
+ *  read as one set no matter how each brand's mark is cropped. */
 export const SHORTCUTS: Shortcut[] = [
-  { label: 'Amazon', glyph: 'a', bg: '#ff9900', fg: '#111' },
-  { label: 'Gmail', glyph: 'M', bg: '#ea4335' },
-  { label: 'YouTube', glyph: '▶', bg: '#ff0000' },
-  { label: 'Target', glyph: '◎', bg: '#cc0000' },
-  { label: 'Reddit', glyph: 'r', bg: '#ff4500' },
-  { label: 'Consumer Reports', glyph: 'CR', bg: '#00803e' },
+  { label: 'Amazon', icon: '/figma/sc-amazon.png' },
+  { label: 'Gmail', icon: '/figma/sc-gmail.png' },
+  { label: 'YouTube', icon: '/figma/sc-youtube.png' },
+  { label: 'Target', icon: '/figma/sc-target.png' },
+  { label: 'Reddit', icon: '/figma/sc-reddit.png' },
+  { label: 'Consumer Reports', icon: '/figma/sc-cr.png' },
 ]
 
 function ShortcutTile({ s, onClick }: { s: Shortcut; onClick?: () => void }) {
@@ -44,11 +46,8 @@ function ShortcutTile({ s, onClick }: { s: Shortcut; onClick?: () => void }) {
       onClick={onClick}
       className="flex w-[112px] flex-col items-center gap-[8px] rounded-[8px] px-[8px] py-[12px] transition-colors hover:bg-[#f1f3f4]"
     >
-      <span
-        className="flex size-[48px] items-center justify-center rounded-full text-[20px] font-bold leading-none"
-        style={{ background: s.bg, color: s.fg ?? '#fff' }}
-      >
-        {s.glyph}
+      <span className="flex size-[48px] items-center justify-center rounded-full border border-[#ececec] bg-white">
+        <img src={s.icon} alt="" className="size-[26px] shrink-0 object-contain" />
       </span>
       <span className="w-full truncate text-center text-[12px] text-[#3c4043]">{s.label}</span>
     </button>
