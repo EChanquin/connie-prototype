@@ -356,7 +356,10 @@ export function AnnotationsScreen() {
       'Verify these marketing claims from the Baby Trend Passport Switch 6-in-1 Amazon product ' +
       'page. For each claim, reconcile it against Consumer Reports lab data and community feedback, ' +
       'and return an inline_annotations response (one entry per claim). Flag any claim that the CR ' +
-      'lab data contradicts as "misleading", quoting the specific CR finding.\n\nClaims:\n' +
+      'lab data contradicts as "misleading". For every misleading claim, include TWO evidence ' +
+      'items: the Consumer Reports lab finding first, then a real community or owner quote (Reddit ' +
+      'or a parenting forum) that echoes it, so the shopper sees both the lab data and social ' +
+      'proof.\n\nClaims:\n' +
       ABOUT_BULLETS.map((b, i) => `${i + 1}. "${b.lead} ${b.rest}"`).join('\n'),
   }
   /** Seed from the session cache so returning to this screen doesn't re-verify. */
