@@ -5,7 +5,13 @@ import { create } from 'zustand'
  * These drive the live personalization: passed into callConnie() for Decision Support and
  * Product Insights, and shown in the "BASED ON · Preferences" popover.
  */
-const DEFAULT_PREFERENCES = ['Long-term reliability', 'Ease of use']
+/**
+ * Deliberately EMPTY, for the same reason as DEFAULT_SOURCES below: what you care about when
+ * shopping is the shopper's answer to give, not ours to assume. Nothing is pre-selected in N4b.
+ * Downstream (Decision Support, Product Insights) already treats "no priorities" as unset rather
+ * than as a filter, so an untouched survey personalizes nothing rather than personalizing wrongly.
+ */
+const DEFAULT_PREFERENCES: string[] = []
 /**
  * Communities connected during onboarding (N4a). Deliberately EMPTY: which communities you trust
  * is the shopper's answer to give, not ours to assume — nothing is pre-selected, and N4a's Next
@@ -24,7 +30,15 @@ export const ALL_PREFERENCES = [
   'Ease of use',
   'Sustainability',
 ]
-export const ALL_COMMUNITIES = ['Instagram', 'Reddit', 'YouTube', 'Tiktok', 'Pinterest', 'Online blogs']
+export const ALL_COMMUNITIES = [
+  'Instagram',
+  'Reddit',
+  'YouTube',
+  'Tiktok',
+  'Pinterest',
+  'Online blogs',
+  'Review sites',
+]
 
 interface PreferencesState {
   preferences: string[]

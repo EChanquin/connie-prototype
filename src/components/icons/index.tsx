@@ -1,4 +1,4 @@
-import type { SVGProps } from 'react'
+import { useId, type SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number }
 
@@ -13,6 +13,20 @@ const base = (size: number): SVGProps<SVGSVGElement> => ({
   strokeLinejoin: 'round',
 })
 
+/**
+ * Solid counterparts to the outline icons — the nav rail's selected state.
+ *
+ * Same 24×24 grid as `base`, painted rather than stroked, so a selected tab reads as filled-in
+ * against its unselected siblings.
+ */
+const solid = (size: number): SVGProps<SVGSVGElement> => ({
+  width: size,
+  height: size,
+  viewBox: '0 0 24 24',
+  fill: 'currentColor',
+  stroke: 'none',
+})
+
 export const IconX = ({ size = 20, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <path d="M6 6l12 12M18 6L6 18" />
@@ -22,6 +36,57 @@ export const IconX = ({ size = 20, ...p }: IconProps) => (
 export const IconChat = ({ size = 20, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />
+  </svg>
+)
+
+/* ---- Solid nav-rail icons. Chat/Heart reuse their outline geometry verbatim — those paths are
+   already closed shapes, so filling them gives an exact solid twin of the outline. ---- */
+
+export const IconChatFilled = ({ size = 20, ...p }: IconProps) => (
+  <svg {...solid(size)} {...p}>
+    <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 0 1-.9-3.8A8.38 8.38 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" />
+  </svg>
+)
+
+export const IconHeartFilled = ({ size = 20, ...p }: IconProps) => (
+  <svg {...solid(size)} {...p}>
+    <path d="M20.8 6.6a5 5 0 0 0-7.1 0L12 8.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-7.3a5 5 0 0 0 0-7.1z" />
+  </svg>
+)
+
+/**
+ * Solid help mark: the same disc and question mark as the outline, with the "?" masked OUT of the
+ * fill rather than drawn on top. Knocking it through means the button's own background shows in the
+ * counter, which is what makes it read as a solid icon instead of a green blob.
+ */
+export const IconHelpFilled = ({ size = 20, ...p }: IconProps) => {
+  const id = useId()
+  return (
+    <svg {...solid(size)} {...p}>
+      <mask id={id}>
+        <circle cx="12" cy="12" r="9" fill="#fff" />
+        <path
+          d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"
+          fill="none"
+          stroke="#000"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </mask>
+      <circle cx="12" cy="12" r="9" mask={`url(#${id})`} />
+    </svg>
+  )
+}
+
+/**
+ * Solid gear. Unlike the others this is its own geometry, not the outline's: `IconSettings` is a
+ * single meandering stroke path that describes the gear's *outline*, and filling a path like that
+ * paints a blob. This one is a real closed gear whose hub knocks out on the nonzero fill rule.
+ */
+export const IconSettingsFilled = ({ size = 20, ...p }: IconProps) => (
+  <svg {...solid(size)} {...p}>
+    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z" />
   </svg>
 )
 
