@@ -58,8 +58,12 @@ Project → **Settings → Environment Variables**. Add both (Production + Previ
 
 | Name | Value |
 |---|---|
-| `LANGFLOW_URL` | your always-on Langflow URL, e.g. `https://connie-langflow.up.railway.app` (no trailing slash) |
-| `LANGFLOW_API_KEY` | the API key for that Langflow instance |
+| `LANGFLOW_URL` | your always-on Langflow URL, e.g. `http://34.70.72.51:7860` (the GCP VM, no trailing slash) |
+| `LANGFLOW_API_KEY` | the API key created ON the cloud Langflow (not your local one — keys are per-instance) |
+| `VITE_FLOW_ID` | the flow id from the cloud Langflow URL, e.g. `a9ea7e6c-c9da-42ec-8b37-dc6a7e23b3a2` |
+
+`LANGFLOW_URL` / `LANGFLOW_API_KEY` are read server-side by the proxy (no `VITE_` prefix).
+`VITE_FLOW_ID` is baked into the build (it's not secret) so the browser calls the right flow.
 
 No `VITE_` prefix — that's what keeps them server-side. The browser bundle never contains them.
 

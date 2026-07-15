@@ -27,8 +27,14 @@ const env = (import.meta as unknown as { env?: Record<string, string> }).env ?? 
 const LANGFLOW_BASE_URL = env.VITE_LANGFLOW_URL ?? '/langflow';
 const API_KEY = env.VITE_LANGFLOW_API_KEY; // only needed if you bypass the proxy
 
-/** Imported flow id (stable as long as you edit in place rather than re-importing). */
-const FLOW_ID = '5c8974c3-52ba-4b7e-b806-9ce2375b127a';
+/**
+ * Flow id. Re-importing a flow into a different Langflow instance changes this, so it's
+ * configurable per environment:
+ *   - Local dev (default): the flow on your laptop's Langflow.
+ *   - Vercel live demo: set VITE_FLOW_ID to the CLOUD Langflow's flow id (it points at the VM).
+ * Not secret — safe to bake into the browser build.
+ */
+const FLOW_ID = env.VITE_FLOW_ID ?? '5c8974c3-52ba-4b7e-b806-9ce2375b127a';
 
 /** One prior turn of a conversation, as plain text. Connie's turns are SUMMARIES, not raw JSON —
  *  feeding whole payloads back in would blow up the token count and confuse classification. */

@@ -36,15 +36,15 @@ export async function warmConnieForDemo(priorities?: string): Promise<void> {
   const p = priorities || undefined;
 
   const queue: CallConnieOptions[] = [
-    // Product Insights — recommended card (centre green badge)
-    { message: 'What are the key insights on the Baby Trend Passport Switch 6-in-1?', priorities: p },
-    // Inline annotations
-    { message: 'Verify the marketing claims on this Baby Trend Passport Switch 6-in-1 product page.' },
-    // Product Insights — the two NOT RECOMMENDED cards
-    { message: 'What are the key insights on the Dream On Me Aero Travel Umbrella Stroller?', priorities: p },
-    { message: 'What are the key insights on the Graco Ready2Grow 2.0 Double Stroller?', priorities: p },
-    // Decision Support ranking
-    { message: 'Rank these strollers for me', priorities: p },
+    // Product Insights first — all three cards on that one screen, so the NOT RECOMMENDED cards
+    // (which fetch lazily on click and otherwise make you wait live) are warm by the time you open
+    // them, exactly like the recommended card.
+    { message: 'What are the key insights on the Baby Trend Passport Switch 6-in-1?', priorities: p }, // recommended (green)
+    { message: 'What are the key insights on the Dream On Me Aero Travel Umbrella Stroller?', priorities: p }, // not-rec (left grey)
+    { message: 'What are the key insights on the Graco Ready2Grow 2.0 Double Stroller?', priorities: p }, // not-rec (right grey)
+    // Then the other screens, in demo order.
+    { message: 'Verify the marketing claims on this Baby Trend Passport Switch 6-in-1 product page.' }, // annotations
+    { message: 'Rank these strollers for me', priorities: p }, // decision support
   ];
 
   for (let i = 0; i < queue.length; i++) {
