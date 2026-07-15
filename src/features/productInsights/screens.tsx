@@ -1206,8 +1206,22 @@ export function ProductInsightsScreen() {
   const notRecPayload = notRecPayloads[notRecSlot] ?? null
   const notRecLive = notRecPayload ? insightsToRows(notRecPayload, sources) : null
   const notRecPanelRows = notRecLive && notRecLive.length > 0 ? notRecLive : notRecRows
-  /** Shimmer until this badge's fetch settles. Reopening an already-fetched card is instant. */
-  const notRecLoading = notRecSettled[notRecSlot] !== true
+
+  // The 5s "Analyzing…" beat also plays every time a NOT RECOMMENDED card is opened — even when its
+  // data is already warmed — so it matches the recommended card's reveal instead of popping open.
+  const [notRecMinDone, setNotRecMinDone] = useState<Partial<Record<NotRecSlot, boolean>>>({})
+  useEffect(() => {
+    if (variant !== 'notrec') return
+    setNotRecMinDone((prev) => ({ ...prev, [notRecSlot]: false }))
+    const t = window.setTimeout(
+      () => setNotRecMinDone((prev) => ({ ...prev, [notRecSlot]: true })),
+      LOADING_MS,
+    )
+    return () => window.clearTimeout(t)
+  }, [variant, notRecSlot])
+
+  /** Shimmer until BOTH the 5s beat has played AND this badge's fetch has settled. */
+  const notRecLoading = !(notRecSettled[notRecSlot] === true && notRecMinDone[notRecSlot] === true)
 
   // "Generating insights" shimmer over the product images, before the badges appear.
   //
@@ -1217,22 +1231,28 @@ export function ProductInsightsScreen() {
   // real fetch settles, with LOADING_MS as a FLOOR so it never flashes, and a ceiling so a hung
   // backend can't trap the user behind a permanent shimmer.
   //
-  // If the answer is already cached (we've been on this screen before), skip the whole thing —
-  // re-running an "Analyzing…" animation over data we already have is theatre, not feedback.
+  // The "Analyzing…" beat ALWAYS plays for LOADING_MS, even when the answer is already cached from
+  // the demo warm — that 5-second moment is the signature of the product, and skipping it (just
+  // because data is ready) makes the reveal feel like a page that didn't do anything.
+  //
+  //   minShimmerDone  = the 5s floor. Always runs.
+  //   insightsSettled = data is ready. TRUE immediately if warmed/cached; otherwise set when the
+  //                     fetch finishes, with MAX_LOADING_MS as a hung-backend ceiling.
+  //
+  // The overlay clears only when BOTH are true, so:
+  //   • warmed  → 5s of "Analyzing…", then the real data appears (the experience you want)
+  //   • cold    → shimmer holds until the data actually lands (never mock-then-swap)
   const alreadyCached = livePayload !== null
-  // Ceiling only, for a hung backend. It must be comfortably LONGER than a real call: a
-  // `product_insights` request does live web searches and routinely runs past 20s. Set it too low
-  // and the ceiling fires mid-flight, revealing the mock rows while the real answer is still on its
-  // way — which is the exact failure this shimmer exists to prevent.
-  const [minShimmerDone, setMinShimmerDone] = useState(alreadyCached)
+  const [minShimmerDone, setMinShimmerDone] = useState(false)
   const [insightsSettled, setInsightsSettled] = useState(alreadyCached)
   useEffect(() => {
-    if (alreadyCached) return
     const min = window.setTimeout(() => setMinShimmerDone(true), LOADING_MS)
-    const max = window.setTimeout(() => setInsightsSettled(true), MAX_LOADING_MS)
+    const max = alreadyCached
+      ? undefined
+      : window.setTimeout(() => setInsightsSettled(true), MAX_LOADING_MS)
     return () => {
       window.clearTimeout(min)
-      window.clearTimeout(max)
+      if (max) window.clearTimeout(max)
     }
   }, [alreadyCached])
   const generating = !minShimmerDone || !insightsSettled

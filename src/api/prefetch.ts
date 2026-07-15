@@ -51,13 +51,16 @@ export async function warmConnieForDemo(priorities?: string): Promise<void> {
     { message: 'Rank these strollers for me', priorities: p }, // decision support
   ];
 
-  for (const opts of queue) {
+  console.info('%c[Connie] Warming demo… (open Product Insights only once this says "ready")', 'color:#7a9');
+  for (let i = 0; i < queue.length; i++) {
     // AWAIT each — one heavy call at a time, so we never pile up concurrent Vertex requests.
     try {
-      await callConnieCached(opts);
+      await callConnieCached(queue[i]);
+      console.info(`%c[Connie] warmed ${i + 1}/${queue.length}`, 'color:#7a9');
     } catch {
       /* best-effort; the screen will fetch on its own if this one missed (e.g. a transient 429) */
     }
     await sleep(GAP_MS); // brief breather so the per-minute quota can recover before the next
   }
+  console.info('%c[Connie] Warm complete — cards are ready, open away.', 'color:#3a7; font-weight:bold');
 }

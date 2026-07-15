@@ -7,6 +7,7 @@ import { useCollabStore } from '@/store/useCollabStore'
 import { NaviRail } from '@/components/connie/NaviRail'
 import { ProductBackdrop } from '@/components/connie/RetailBackdrop'
 import { DimOverlay } from '@/components/connie/DimOverlay'
+import { ABOUT_BULLETS } from '@/components/retail/AmazonProductPage'
 import { cn } from '@/lib/cn'
 import { LOADING_MS, MAX_LOADING_MS } from '@/lib/timing'
 import { callConnieCached, peekConnieCache } from '@/api/connieClient'
@@ -344,10 +345,19 @@ export function AnnotationsScreen() {
   }
 
   // Fetch live inline annotations once; index them by verdict so each callout can use its own.
+  //
+  // We send the actual bold marketing claims from the page (the ones the UI highlights), not just
+  // "verify the claims" — otherwise the agent has nothing concrete to check and replies with chat
+  // asking us to provide them. With the claims in hand it reconciles each against the CR lab data:
+  // the "FOLDS WITH ONE HAND" claim is the key one — CR's data says it's a two-step, two-handed,
+  // bulky fold, so it should come back `misleading`.
   const ANN_REQUEST = {
-    // Product must exist in the CR dataset (v5 roster — see `backend-data/README.md`), otherwise
-    // the agent has nothing to reconcile the page's claims against.
-    message: 'Verify the marketing claims on this Baby Trend Passport Switch 6-in-1 product page.',
+    message:
+      'Verify these marketing claims from the Baby Trend Passport Switch 6-in-1 Amazon product ' +
+      'page. For each claim, reconcile it against Consumer Reports lab data and community feedback, ' +
+      'and return an inline_annotations response (one entry per claim). Flag any claim that the CR ' +
+      'lab data contradicts as "misleading", quoting the specific CR finding.\n\nClaims:\n' +
+      ABOUT_BULLETS.map((b, i) => `${i + 1}. "${b.lead} ${b.rest}"`).join('\n'),
   }
   /** Seed from the session cache so returning to this screen doesn't re-verify. */
   const cachedAnns = () => {
