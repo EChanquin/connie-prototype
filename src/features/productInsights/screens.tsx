@@ -1165,44 +1165,47 @@ export function ProductInsightsScreen() {
     }
     return seed
   })
+  // Fetch BOTH not-recommended products in the background on mount — not lazily on click. The
+  // recommended card already fetches on mount, which is why it feels ready and the grey cards did
+  // not: nothing happened for them until the badge was clicked. Now they load alongside it, so by
+  // the time a grey badge is clicked its data is already in flight or done. Staggered a few seconds
+  // apart so all three product_insights calls don't fire simultaneously and trip the Vertex quota.
   useEffect(() => {
-    if (variant !== 'notrec') return
-    const key = `${notRecSlot}|${priorityKey}`
-    if (notRecFetched.current.has(key)) return
-    notRecFetched.current.add(key)
-    setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: false }))
-    // Same ceiling as the recommended card — long enough not to fire during a normal call.
-    const cap = window.setTimeout(
-      () => setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: true })),
-      MAX_LOADING_MS,
-    )
-    callConnieCached({
-      message: `What are the key insights on the ${NOT_REC_PRODUCTS[notRecSlot].name}?`,
-      priorities: priorityKey || undefined,
+    const timers: number[] = []
+    NOT_REC_SLOTS.forEach((slot, i) => {
+      const key = `${slot}|${priorityKey}`
+      if (notRecFetched.current.has(key)) return
+      notRecFetched.current.add(key)
+      timers.push(
+        window.setTimeout(
+          () => {
+            callConnieCached({
+              message: `What are the key insights on the ${NOT_REC_PRODUCTS[slot].name}?`,
+              priorities: priorityKey || undefined,
+            })
+              .then((r) => {
+                if (isProductInsights(r) && r.product_insights.insights.length > 0) {
+                  setNotRecPayloads((prev) => ({ ...prev, [slot]: r.product_insights }))
+                } else {
+                  console.warn(
+                    `[Connie] NOT RECOMMENDED (${slot}) fell back to mock rows: backend returned`,
+                    r,
+                  )
+                }
+              })
+              .catch((err) => {
+                console.warn(`[Connie] NOT RECOMMENDED (${slot}) fetch failed, showing mock:`, err)
+              })
+              // Settled either way: live data replaces the shimmer, a failure falls back to mock.
+              .finally(() => setNotRecSettled((prev) => ({ ...prev, [slot]: true })))
+          },
+          // Recommended fetches at mount (0s); offset the grey cards so the three don't stack.
+          4000 * (i + 1),
+        ),
+      )
     })
-      .then((r) => {
-        if (isProductInsights(r) && r.product_insights.insights.length > 0) {
-          setNotRecPayloads((prev) => ({ ...prev, [notRecSlot]: r.product_insights }))
-        } else {
-          // Wrong response_type, or zero insights — the panel will silently show baked rows,
-          // which look plausible enough to be mistaken for live data. Say so.
-          console.warn(
-            `[Connie] NOT RECOMMENDED (${notRecSlot}) fell back to mock rows: backend returned`,
-            r,
-          )
-        }
-      })
-      .catch((err) => {
-        // Keep baked rows, but never fail silently — a 429 from the Vertex quota looks exactly
-        // like "the mock was always there" otherwise.
-        console.warn(`[Connie] NOT RECOMMENDED (${notRecSlot}) fetch failed, showing mock:`, err)
-      })
-      // Settled either way: live data replaces the shimmer, a failure falls back to mock rows.
-      .finally(() => {
-        window.clearTimeout(cap)
-        setNotRecSettled((prev) => ({ ...prev, [notRecSlot]: true }))
-      })
-  }, [variant, notRecSlot, priorityKey])
+    return () => timers.forEach((t) => window.clearTimeout(t))
+  }, [priorityKey])
   const notRecPayload = notRecPayloads[notRecSlot] ?? null
   const notRecLive = notRecPayload ? insightsToRows(notRecPayload, sources) : null
   const notRecPanelRows = notRecLive && notRecLive.length > 0 ? notRecLive : notRecRows
